@@ -1,15 +1,6 @@
 import { h } from '../dom.js';
 
-// Placeholder views for the diagrams, replaced as each one is built.
-export function renderBooks(container) {
-  container.replaceChildren(
-    h('h1', { class: 'view-title', tabindex: '-1' }, 'Book links'),
-    h('p', { class: 'view-intro' }, 'How strongly each book of the Bible points to every other book.'),
-    h('div', { class: 'placeholder' }, 'The book diagram isn’t built yet.'),
-  );
-  document.title = 'Book links · Bible Cross-Reference Explorer';
-}
-
+// Placeholder views, replaced as each one is built.
 export function renderAbout(container) {
   container.replaceChildren(
     h('h1', { class: 'view-title', tabindex: '-1' }, 'About'),

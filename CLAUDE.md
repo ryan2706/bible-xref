@@ -26,8 +26,8 @@ Shared modules. Reuse these in new views instead of re-implementing them.
 
 - `src/data.js`: every data fetch. Builds URLs from `BASE_URL` and caches each file's
   promise in memory, so a book is downloaded once. `loadBooks`, `loadVerses(abbr)`,
-  `loadXrefs(abbr)`, `loadOverview()`, `getVerseText(index, id)`. Add loaders for
-  `book-matrix.json` and `search.json` here.
+  `loadXrefs(abbr)`, `loadOverview()`, `loadBookMatrix()`, `getVerseText(index, id)`. Add the
+  loader for `search.json` here.
 - `src/refs.js`: verse IDs and references. `getIndex(books)` (memoised) gives `locate(id)`,
   `label(id, short)`, `rangeLabel(start, end, short)`, `osis(id)`, `idOf(book, ch, v)`,
   `parseOsis("John.3.16")`, `testament(id)`, `shortName(book)`, book autocomplete, and
@@ -35,7 +35,8 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   parses what people type ("jn 3 16", "1 John 4:8"). Never format or parse references by hand.
 - `src/preview.js`: `attachPreview(el, index, id, title)` adds the verse-text popover on
   hover/focus (one shared, dismissable popover). Works on HTML and SVG elements.
-  `showPreview(anchor, title, note)` / `hidePreview()` drive the same popover by hand (e.g. for canvas).
+  `showPreview(anchor, title, note)` / `hidePreview()` drive the same popover by hand (e.g. for canvas);
+  `note` is a string or an element (e.g. a list).
 - `src/theme.js`: light/dark toggle, `isDark()`, and a `themechange` window event.
   `themeColor('--arc-ot')` reads a colour token for canvas drawing. `SECTIONS` and
   `sectionOf(book)` give the 8 chord-diagram sections, their order and colour tokens.
@@ -47,7 +48,13 @@ Shared modules. Reuse these in new views instead of re-implementing them.
 - `src/views/`: `verse.js` (reading + margin columns), `verse-graph.js` (D3 force graph with
   label-aware box collision), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
   canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`),
-  `placeholders.js` (Books, About, not found).
+  `books.js` (chord diagram: ribbons on the same three stacked canvases with `isPointInPath` hit testing,
+  book arcs and labels in an SVG overlay; labels never leave their section's span, and crowded runs
+  collapse into one group label like "Minor Prophets"; details panel that becomes a bottom sheet below 720px;
+  state in `#/books?pair=Isa-Matt`, `?book=Isa`, `&self=1`), `placeholders.js` (About, not found).
+- Label checks: in dev, `books.js` and `arcs.js` verify after every layout that each label sits inside its
+  own section, log a console error if not, and put the result on `window.__labelCheck` for Playwright.
+  `tests/books-labels.js` checks the rendered Books labels at 4 widths, both themes, self-links on/off.
 - Canvas performance: never stroke per-arc with `multiply` (Chrome re-reads the canvas per stroke,
   ~100x slower). Accumulate on a transparent offscreen canvas and multiply that once, as `arcs.js` does.
 

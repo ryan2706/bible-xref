@@ -4,7 +4,7 @@ const DEFAULT_HASH = '#/verse/John.3.16';
 const routes = [
   { pattern: /^#\/verse\/([^/]+)$/, view: 'verse' },
   { pattern: /^#\/arcs(?:\?(.*))?$/, view: 'arcs' }, // ?min=30&book=Isa
-  { pattern: /^#\/books$/, view: 'books' },
+  { pattern: /^#\/books(?:\?(.*))?$/, view: 'books' }, // ?book=Isa or ?pair=Isa-Matt, &self=1
   { pattern: /^#\/about$/, view: 'about' },
 ];
 

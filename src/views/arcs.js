@@ -247,7 +247,11 @@ function buildChart(figure, index, overview, initial) {
       if (!names || sec.books.filter((b) => !shown.has(b)).length < 2) continue;
       const last = sec.books.at(-1);
       const [x0, x1] = span(sec.books[0].firstChapter, last.firstChapter + last.chapters - 1);
-      for (const text of names) {
+      // Prefer the longest name that fits within the section; if none does, the
+      // shortest, so the text spills as little as possible past the section's ends.
+      const fitsSpan = (t) => ctx.measureText(t).width <= x1 - x0;
+      const ordered = [...names.filter(fitsSpan), ...names.filter((t) => !fitsSpan(t)).reverse()];
+      for (const text of ordered) {
         const w = ctx.measureText(text).width;
         const x = centred(x0, x1, w);
         const textBox = [x - w / 2 - 4, x + w / 2 + 4], bracket = [x0 + 1, x1 - 1];
@@ -264,7 +268,33 @@ function buildChart(figure, index, overview, initial) {
         break;
       }
     }
+    if (import.meta.env.DEV) checkLabels(L, books, groups, ctx, span);
     return { books, groups };
+  }
+
+  // Dev-only guard: every label sits under its own section. A book label's centre and
+  // a group label's centre and bracket must lie within the section's span; text that
+  // overhangs the span's edge is listed separately. Results also go on
+  // window.__labelCheck for the Playwright checks.
+  function checkLabels(L, bookLabels, groupLabels, ctx, span) {
+    const runs = sections().map((sec) => ({ ...sec, span: span(sec.books[0].firstChapter, sec.books.at(-1).firstChapter + sec.books.at(-1).chapters - 1) }));
+    const runOf = (b) => runs.find((r) => r.books.includes(b));
+    const bad = [], overhang = [];
+    const check = (text, x, run, font, extra = true) => {
+      const [lo, hi] = run.span;
+      const w = ((ctx.font = font), ctx.measureText(text).width);
+      if (x < lo || x > hi || !extra) bad.push(`${text} (${run.section})`);
+      else if (x - w / 2 < lo - 0.5 || x + w / 2 > hi + 0.5) {
+        overhang.push(`${text} (${run.section}) ${Math.max(lo - (x - w / 2), x + w / 2 - hi).toFixed(1)}px`);
+      }
+    };
+    for (const l of bookLabels) check(l.text, l.x, runOf(l.book), labelFont());
+    for (const g of groupLabels) {
+      const run = runOf(g.books[0]);
+      check(g.text, g.x, run, `italic ${labelFont()}`, g.x0 >= run.span[0] - 0.5 && g.x1 <= run.span[1] + 0.5);
+    }
+    window.__labelCheck = { view: 'arcs', W: L.W, labels: bookLabels.length + groupLabels.length, groups: groupLabels.map((g) => g.text), bad, overhang };
+    if (bad.length) console.error(`Arc labels outside their section at ${L.W}px: ${bad.join(', ')}`);
   }
 
   // Runs of books in the same section and Testament, in canonical order.

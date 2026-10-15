@@ -42,17 +42,17 @@ function trim(text) {
   return text.slice(0, text.lastIndexOf(' ', PREVIEW_CHARS)) + ' …';
 }
 
-// `text` is a string (shown as is, in the interface font) or a promise of verse text.
+// `text` is a string or element (shown as is, in the interface font) or a promise of verse text.
 async function show(anchor, title, text) {
   ensurePopover();
   clearTimeout(hideTimer);
   if (current && current !== anchor) current.removeAttribute('aria-describedby');
   current = anchor;
   const mine = ++token;
-  const ready = typeof text === 'string';
+  const ready = typeof text === 'string' || text instanceof Node;
   popover.replaceChildren(
     h('strong', {}, title),
-    h('span', { class: ready ? 'preview-note' : 'preview-text' }, ready ? text : 'Loading…'),
+    h(text instanceof Node ? 'div' : 'span', { class: ready ? 'preview-note' : 'preview-text' }, ready ? text : 'Loading…'),
   );
   popover.hidden = false;
   place(anchor);
@@ -92,6 +92,7 @@ export function attachPreview(el, index, id, title) {
 }
 
 // For things that aren't single elements, like a chapter on the arc canvas: shows
-// `title` and a short note next to `anchor` until hidePreview() is called.
+// `title` and a short note (a string or an element, e.g. a list) next to `anchor`
+// until hidePreview() is called.
 export const showPreview = (anchor, title, note) => show(anchor, title, note);
 export const hidePreview = hide;
