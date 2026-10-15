@@ -628,3 +628,105 @@ main {
 .swatch.current {
   background: var(--select);
 }
+
+.preview-note {
+  display: block;
+  color: var(--ink-muted);
+}
+
+/* ---------------------------------------------------------------------------
+   Arc diagram
+   --------------------------------------------------------------------------- */
+.arcs-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem 2rem;
+  margin-bottom: 1.25rem;
+  font-size: var(--step--1);
+}
+
+.arcs-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.arcs-control label {
+  color: var(--ink-muted);
+}
+
+.arcs-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.arcs-slider input {
+  width: min(16rem, 60vw);
+  accent-color: var(--ink-muted);
+}
+
+.arcs-votes-value {
+  min-width: 3.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+.arcs-control select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  min-height: 2.25rem;
+}
+
+.arcs-count {
+  margin: 0 0 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The chart fits the page on wide screens and scrolls sideways on narrow ones. */
+.arcs-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 0.25rem;
+}
+
+.arcs-scroll:focus-visible {
+  outline-offset: 4px;
+}
+
+.arcs-stack {
+  position: relative;
+  cursor: pointer;
+  touch-action: pan-x pan-y;
+}
+
+.arcs-layer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  display: block;
+}
+
+.arcs-layer[hidden] {
+  display: none;
+}
+
+.arcs-marker {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  pointer-events: none;
+}
+
+.arcs-hint {
+  color: var(--ink-muted);
+  font-size: var(--step--1);
+  margin: 0.5rem 0 0;
+}
+
+.swatch.cross {
+  background: linear-gradient(90deg, var(--arc-ot), var(--arc-nt));
+}

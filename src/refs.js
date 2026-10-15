@@ -62,10 +62,19 @@ export function getIndex(books) {
     return `${short ? shortName(book) : book.name} ${chapter}:${verse}`;
   };
 
+  // Every chapter in canonical order; overview.json's chapter numbers index into this.
+  const chapters = books.flatMap((b) =>
+    b.versesPerChapter.map((verses, c) => ({ index: b.firstChapter + c, book: b, chapter: c + 1, verses, firstId: chapterStarts[b.index][c] })),
+  );
+
   const index = {
     books,
+    chapters,
     locate,
     label,
+    shortName,
+    // "Genesis 1" (or "1 Sam 3" when short) for a chapter from `chapters`.
+    chapterLabel: (ch, short = false) => `${short ? shortName(ch.book) : ch.book.name} ${ch.chapter}`,
     idOf: (book, chapter, verse) => chapterStarts[book.index][chapter - 1] + verse - 1,
     osis: (id) => {
       const { book, chapter, verse } = locate(id);

@@ -3,7 +3,8 @@ import { startRouter } from './router.js';
 import { initThemeToggle } from './theme.js';
 import { initSearch } from './search.js';
 import { renderVerse } from './views/verse.js';
-import { renderArcs, renderBooks, renderAbout, renderNotFound } from './views/placeholders.js';
+import { renderArcs } from './views/arcs.js';
+import { renderBooks, renderAbout, renderNotFound } from './views/placeholders.js';
 
 const app = document.getElementById('app');
 const navLinks = document.querySelectorAll('.site-nav a');

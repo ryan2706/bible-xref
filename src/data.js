@@ -19,6 +19,7 @@ function loadJson(path) {
 export const loadBooks = () => loadJson('books.json');
 export const loadVerses = (abbr) => loadJson(`verses/${abbr}.json`);
 export const loadXrefs = (abbr) => loadJson(`xrefs/${abbr}.json`);
+export const loadOverview = () => loadJson('overview.json');
 
 // Display text for one verse, loading (and caching) its book's file if needed.
 export async function getVerseText(index, id) {

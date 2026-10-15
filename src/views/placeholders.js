@@ -1,15 +1,6 @@
 import { h } from '../dom.js';
 
 // Placeholder views for the diagrams, replaced as each one is built.
-export function renderArcs(container) {
-  container.replaceChildren(
-    h('h1', { class: 'view-title', tabindex: '-1' }, 'Chapter arcs'),
-    h('p', { class: 'view-intro' }, 'Every chapter from Genesis to Revelation in one line, with an arc for each pair of chapters that cross-reference each other.'),
-    h('div', { class: 'placeholder' }, 'The arc diagram isn’t built yet.'),
-  );
-  document.title = 'Chapter arcs · Bible Cross-Reference Explorer';
-}
-
 export function renderBooks(container) {
   container.replaceChildren(
     h('h1', { class: 'view-title', tabindex: '-1' }, 'Book links'),

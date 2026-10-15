@@ -26,24 +26,63 @@ Shared modules. Reuse these in new views instead of re-implementing them.
 
 - `src/data.js`: every data fetch. Builds URLs from `BASE_URL` and caches each file's
   promise in memory, so a book is downloaded once. `loadBooks`, `loadVerses(abbr)`,
-  `loadXrefs(abbr)`, `getVerseText(index, id)`. Add loaders for `overview.json`,
+  `loadXrefs(abbr)`, `loadOverview()`, `getVerseText(index, id)`. Add loaders for
   `book-matrix.json` and `search.json` here.
 - `src/refs.js`: verse IDs and references. `getIndex(books)` (memoised) gives `locate(id)`,
   `label(id, short)`, `rangeLabel(start, end, short)`, `osis(id)`, `idOf(book, ch, v)`,
-  `parseOsis("John.3.16")`, `testament(id)` and book autocomplete. `parseTypedRef(text, index)`
+  `parseOsis("John.3.16")`, `testament(id)`, `shortName(book)`, book autocomplete, and
+  `chapters` (every chapter in canonical order, indexed like overview.json) with `chapterLabel(ch)`. `parseTypedRef(text, index)`
   parses what people type ("jn 3 16", "1 John 4:8"). Never format or parse references by hand.
 - `src/preview.js`: `attachPreview(el, index, id, title)` adds the verse-text popover on
   hover/focus (one shared, dismissable popover). Works on HTML and SVG elements.
+  `showPreview(anchor, title, note)` / `hidePreview()` drive the same popover by hand (e.g. for canvas).
 - `src/theme.js`: light/dark toggle, `isDark()`, and a `themechange` window event.
   `themeColor('--arc-ot')` reads a colour token for canvas drawing. `SECTIONS` and
   `sectionOf(book)` give the 8 chord-diagram sections, their order and colour tokens.
 - `src/dom.js`: `h(tag, attrs, ...children)`. Children are set as text, never parsed as HTML.
-- `src/router.js` + `src/main.js`: hash routes. A new view needs a route pattern here and an
+- `src/router.js` + `src/main.js`: hash routes (see the New view checklist below). A new view needs a route pattern here and an
   entry in the `views` map in `main.js`; the nav link's `data-view` must match.
 - `src/search.js`: header search combobox (reference lookup only; free-text search will
   lazy-load `search.json`).
 - `src/views/`: `verse.js` (reading + margin columns), `verse-graph.js` (D3 force graph with
-  label-aware box collision), `placeholders.js` (Arcs, Books, About, not found).
+  label-aware box collision), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
+  canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`),
+  `placeholders.js` (Books, About, not found).
+- Canvas performance: never stroke per-arc with `multiply` (Chrome re-reads the canvas per stroke,
+  ~100x slower). Accumulate on a transparent offscreen canvas and multiply that once, as `arcs.js` does.
+
+## New view checklist
+
+Follow this for every new view (`src/views/arcs.js` is the reference implementation).
+
+1. **Route**: add a pattern to `routes` in `src/router.js`. If the view has filters, accept an
+   optional query (`/^#\/arcs(?:\?(.*))?$/`) so filtered views can be shared.
+2. **Register**: import the render function in `src/main.js` and add it to the `views` map.
+   The nav link in `index.html` needs a matching `data-view`.
+3. **Render function**: `renderX(container, params)`. Start with
+   `h('h1', { class: 'view-title', tabindex: '-1' }, …)` (focus moves there after navigation),
+   a `.view-intro` line, and set `document.title` to `"<View> · Bible Cross-Reference Explorer"`.
+4. **Loading and errors**: show a `.status` "Loading…" line, load through `src/data.js` only,
+   and show a plain-language error if a fetch fails. After every `await`, return early if the
+   view's heading is no longer connected (the user navigated away).
+5. **Reuse**: references and chapters via `src/refs.js`, previews via `src/preview.js`,
+   colours via `themeColor()` and `SECTIONS` in `src/theme.js`, DOM via `h()`.
+6. **Cleanup**: window and document listeners, observers and timers must remove themselves
+   once the view's elements are disconnected (see `onTheme` and the `ResizeObserver` in `arcs.js`).
+7. **Shareable state**: keep filters in the hash query (`#/arcs?min=30&book=Isa`), written with
+   `history.replaceState` (no `hashchange`, so no re-render), omitting defaults, and restored on load.
+   Ignore invalid values rather than erroring.
+8. **Canvas** (more than ~2,000 marks): scale by `devicePixelRatio` (capped at 2), read colours from
+   tokens and redraw on `themechange`, and draw expensive layers only when data, size or theme change.
+   Hover and selection redraw only a light layer on top. Throttle redraws from continuous input
+   (sliders) with `requestAnimationFrame`, never queueing frames, and do a final redraw on `change`.
+9. **Interaction**: mouse hover, keyboard (focusable, arrow keys, Enter, Escape, announced through an
+   `aria-live` region) and touch (tap replaces hover, a second tap activates).
+10. **Responsive**: works at 390px. Wide charts scroll sideways in their own container; the page never does.
+11. **Verify in Playwright**: both themes, 1280px and 390px, keyboard and tap paths, no console errors.
+    Save screenshots under `.playwright-mcp/` (gitignored). For canvas views, report redraw times
+    (with 4x CPU throttling for anything driven by a slider).
+12. **Docs**: add the view to the code map above and any new shared helpers to their module's entry.
 
 ## Tech rules
 
