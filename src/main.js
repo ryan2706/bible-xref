@@ -13,7 +13,7 @@ const navLinks = document.querySelectorAll('.site-nav a');
 const views = { verse: renderVerse, arcs: renderArcs, books: renderBooks, about: renderAbout, 'not-found': renderNotFound };
 let firstRoute = true;
 
-initThemeToggle(document.querySelector('.theme-toggle'));
+initThemeToggle(document.querySelector('.theme-toggle'), document.querySelector('.theme-status'));
 initSearch(document.querySelector('.site-search'));
 
 startRouter(async ({ view, params }) => {

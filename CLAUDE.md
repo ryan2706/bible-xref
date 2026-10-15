@@ -26,7 +26,8 @@ Shared modules. Reuse these in new views instead of re-implementing them.
 
 - `src/data.js`: every data fetch. Builds URLs from `BASE_URL` and caches each file's
   promise in memory, so a book is downloaded once. `loadBooks`, `loadVerses(abbr)`,
-  `loadXrefs(abbr)`, `loadOverview()`, `loadBookMatrix()`, `getVerseText(index, id)`. Add the
+  `loadXrefs(abbr)`, `loadOverview()`, `loadBookMatrix()`, `loadThumb(name)` (SVG markup as text),
+  `getVerseText(index, id)`. Add the
   loader for `search.json` here.
 - `src/refs.js`: verse IDs and references. `getIndex(books)` (memoised) gives `locate(id)`,
   `label(id, short)`, `rangeLabel(start, end, short)`, `osis(id)`, `idOf(book, ch, v)`,
@@ -37,9 +38,15 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   hover/focus (one shared, dismissable popover). Works on HTML and SVG elements.
   `showPreview(anchor, title, note)` / `hidePreview()` drive the same popover by hand (e.g. for canvas);
   `note` is a string or an element (e.g. a list).
-- `src/theme.js`: light/dark toggle, `isDark()`, and a `themechange` window event.
-  `themeColor('--arc-ot')` reads a colour token for canvas drawing. `SECTIONS` and
-  `sectionOf(book)` give the 8 chord-diagram sections, their order and colour tokens.
+- `src/theme.js`: light/dark toggle, `isDark()`, and a `themechange` window event. The button's label names
+  the theme it switches to ("Switch to light"); CSS picks the visible half so it is right from first paint, and a
+  click announces "Dark theme on" through the header's `.theme-status` live region. Between 721 and 1099px the header
+  tightens to stay on one line: the button shows only its icon (label kept for screen readers, `title` tooltip) and
+  `search.js` shortens the placeholder.
+  `themeColor('--arc-ot')` reads a colour token for canvas drawing. It re-exports `SECTIONS` and
+  `sectionOf(book)` (the 8 chord-diagram sections, their order and colour tokens) from `src/sections.js`, which has
+  no DOM code so the data build can import it too. Likewise `src/links.js` (`strongestLinks`: the 15 links a verse's
+  graph draws) is shared by `verse-graph.js` and the thumbnail build.
 - `src/dom.js`: `h(tag, attrs, ...children)`. Children are set as text, never parsed as HTML.
 - `src/router.js` + `src/main.js`: hash routes (see the New view checklist below). A new view needs a route pattern here and an
   entry in the `views` map in `main.js`; the nav link's `data-view` must match.
@@ -51,8 +58,13 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   `books.js` (chord diagram: ribbons on the same three stacked canvases with `isPointInPath` hit testing,
   book arcs and labels in an SVG overlay; labels never leave their section's span, and crowded runs
   collapse into one group label like "Minor Prophets"; details panel that becomes a bottom sheet below 720px;
-  state in `#/books?pair=Isa-Matt`, `?book=Isa`, `&self=1`), `about.js` (About: what the site is, a
-  how-to-read section with a link for each view, and credits), `placeholders.js` (not found).
+  state in `#/books?pair=Isa-Matt`, `?book=Isa`, `&self=1`), `about.js` (About: reading column of
+  ~66 characters, from 1100px a margin column of diagram thumbnails and a sticky "On this page" menu; below that,
+  thumbnails sit above their sections; `#/about?s=arcs` opens at a section; thumbnails are the build's static SVGs,
+  inlined so the theme tokens colour them), `placeholders.js` (not found).
+- Page layout: header, views and footer share one centred column, `--page-max` (80rem) wide. `main` is a grid with
+  `full` and `content` columns; every view's children sit in `content`, and a chart that needs more width can use
+  `grid-column: full` (the arc diagram does, through a subgrid, so its controls and legend stay in the column).
 - Label checks: in dev, `books.js` and `arcs.js` verify after every layout that each label sits inside its
   own section, log a console error if not, and put the result on `window.__labelCheck` for Playwright.
   `tests/books-labels.js` checks the rendered Books labels at 4 widths, both themes, self-links on/off.
@@ -123,6 +135,10 @@ Files in `public/data/`:
 - `overview.json`: `{ chapterCount, minVotes, links: [[chapterA, chapterB, votes]] }`, undirected, by range start
   verse, within-chapter links excluded, summed votes >= 10. The arc diagram's votes slider should default to ~50.
 - `book-matrix.json`: `{ books, matrix }`, directed `matrix[fromBook][toBook]` = summed votes (diagonal included).
+- `thumbs/arcs.svg`, `thumbs/books.svg`, `thumbs/graph.svg`: About page thumbnails from `scripts/build-thumbs.mjs`
+  (~170 KB, ~27 KB gzipped, in all). No colours inside: marks carry classes (`a-ot`, `c0`…`c7`, `g-sel`…) coloured
+  in `style.css` from the theme tokens. Arcs whose ends share a 4-unit bin are merged and drawn more opaque; only the
+  ribbons carrying 90% of the votes are drawn.
 
 Cleanup rules in the build script:
 

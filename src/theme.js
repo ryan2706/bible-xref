@@ -6,44 +6,22 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 // Canvas code reads colours through this (and redraws on 'themechange') instead of hard-coding hexes.
 export const themeColor = (token) => getComputedStyle(root).getPropertyValue(token).trim();
 
-// The 8 chord-diagram sections, in their fixed order, with their colour tokens.
-// Major and Minor Prophets share one section; Acts joins the Gospels.
-export const SECTIONS = [
-  { name: 'Law', token: '--sec-law' },
-  { name: 'History', token: '--sec-history' },
-  { name: 'Poetry', token: '--sec-poetry' },
-  { name: 'Prophets', token: '--sec-prophets' },
-  { name: 'Gospels & Acts', token: '--sec-gospels' },
-  { name: 'Pauline letters', token: '--sec-pauline' },
-  { name: 'General letters', token: '--sec-general' },
-  { name: 'Revelation', token: '--sec-revelation' },
-];
-
-// Index into SECTIONS for a book from books.json.
-export function sectionOf(book) {
-  if (book.testament === 'NT') {
-    if (book.section === 'Gospels' || book.section === 'History') return 4;
-    return { 'Pauline Epistles': 5, 'General Epistles': 6, Apocalyptic: 7 }[book.section];
-  }
-  return { Law: 0, History: 1, Poetry: 2, 'Major Prophets': 3, 'Minor Prophets': 3 }[book.section];
-}
+// Section list and lookup live in sections.js (no DOM, so the data build can use them).
+export { SECTIONS, sectionOf } from './sections.js';
 
 export const isDark = () => root.dataset.theme === 'dark' || (!root.dataset.theme && darkQuery.matches);
 
-export function initThemeToggle(button) {
-  const sync = () => button.setAttribute('aria-pressed', String(isDark()));
+// The button's label (which theme it switches to) is chosen in CSS, so it is right
+// from the first paint. A click also announces the new theme through `status`.
+export function initThemeToggle(button, status) {
   button.addEventListener('click', () => {
     const next = isDark() ? 'light' : 'dark';
     root.dataset.theme = next;
     try {
       localStorage.setItem('theme', next);
     } catch {}
-    sync();
+    status.textContent = `${next === 'dark' ? 'Dark' : 'Light'} theme on`;
     window.dispatchEvent(new CustomEvent('themechange'));
   });
-  darkQuery.addEventListener('change', () => {
-    sync();
-    window.dispatchEvent(new CustomEvent('themechange'));
-  });
-  sync();
+  darkQuery.addEventListener('change', () => window.dispatchEvent(new CustomEvent('themechange')));
 }

@@ -3,11 +3,11 @@
 const DATA_URL = `${import.meta.env.BASE_URL}data/`;
 const cache = new Map();
 
-function loadJson(path) {
+function load(path, as = 'json') {
   if (!cache.has(path)) {
     const request = fetch(DATA_URL + path).then((res) => {
       if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
-      return res.json();
+      return as === 'text' ? res.text() : res.json();
     });
     // Drop failed requests so a retry can try again.
     request.catch(() => cache.delete(path));
@@ -16,11 +16,15 @@ function loadJson(path) {
   return cache.get(path);
 }
 
+const loadJson = (path) => load(path);
+
 export const loadBooks = () => loadJson('books.json');
 export const loadVerses = (abbr) => loadJson(`verses/${abbr}.json`);
 export const loadXrefs = (abbr) => loadJson(`xrefs/${abbr}.json`);
 export const loadOverview = () => loadJson('overview.json');
 export const loadBookMatrix = () => loadJson('book-matrix.json');
+// SVG markup of an About page thumbnail: 'arcs', 'books' or 'graph' (built by scripts/build-thumbs.mjs).
+export const loadThumb = (name) => load(`thumbs/${name}.svg`, 'text');
 
 // Display text for one verse, loading (and caching) its book's file if needed.
 export async function getVerseText(index, id) {

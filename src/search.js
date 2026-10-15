@@ -13,6 +13,14 @@ export function initSearch(form) {
   let options = [];
   let active = -1;
 
+  // The header is tight between the phone and wide layouts (see the matching media
+  // query in style.css), so the example is dropped from the placeholder there.
+  const compact = window.matchMedia('(min-width: 721px) and (max-width: 1099.98px)');
+  const fullPlaceholder = input.placeholder;
+  const setPlaceholder = () => (input.placeholder = compact.matches ? 'Go to a verse' : fullPlaceholder);
+  compact.addEventListener('change', setPlaceholder);
+  setPlaceholder();
+
   const ready = () => (index ? Promise.resolve(index) : loadBooks().then((books) => (index = getIndex(books))));
 
   function close() {

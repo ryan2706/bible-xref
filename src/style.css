@@ -42,6 +42,10 @@
   --step-5: 3rem;
 
   --gutter: clamp(1rem, 4vw, 2.5rem);
+  /* Header, views and footer share one centred column, this wide at most. */
+  --page-max: 80rem;
+  /* Side padding that centres a full-width box's content in that column. */
+  --page-pad: max(var(--gutter), calc((100% - var(--page-max)) / 2));
   --measure: 36rem;
   --margin-col: 15rem;
 }
@@ -125,7 +129,11 @@ a {
   border-radius: 2px;
 }
 
-main:focus {
+/* Focus moves to these after navigation so screen readers land there; they aren't
+   controls, so they don't get a focus ring. */
+main:focus,
+.view-title:focus,
+.about h2:focus {
   outline: none;
 }
 
@@ -151,7 +159,7 @@ main:focus {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.75rem 2rem;
-  padding: 1.25rem var(--gutter) 1rem;
+  padding: 1.25rem var(--page-pad) 1rem;
   border-bottom: 1px solid var(--rule);
 }
 
@@ -193,25 +201,115 @@ main:focus {
   background: none;
   border: 1px solid var(--rule);
   border-radius: 999px;
-  padding: 0.25rem 0.75rem;
+  padding: 0.25rem 0.75rem 0.25rem 0.6rem;
   cursor: pointer;
 }
 
-.theme-toggle:hover,
-.theme-toggle[aria-pressed='true'] {
+.theme-toggle:hover {
   color: var(--ink);
   border-color: var(--ink-muted);
 }
 
+/* The button names the theme it switches to; only one half is shown (and named). */
+.theme-toggle > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.theme-toggle .to-light {
+  display: none;
+}
+
+:root[data-theme='dark'] .theme-toggle .to-dark {
+  display: none;
+}
+
+:root[data-theme='dark'] .theme-toggle .to-light {
+  display: inline-flex;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .theme-toggle .to-dark {
+    display: none;
+  }
+
+  :root:not([data-theme='light']) .theme-toggle .to-light {
+    display: inline-flex;
+  }
+}
+
+/* Between the phone and wide layouts the header is short of room, so it tightens to
+   stay on one line: smaller gaps, a title that scales with the window, a shorter search
+   placeholder (search.js), and an icon-only theme button whose label stays in the
+   accessibility tree (the title attribute gives a tooltip). */
+@media (min-width: 721px) and (max-width: 1099.98px) {
+  .site-header {
+    column-gap: 1rem;
+  }
+
+  .site-title {
+    font-size: clamp(var(--step-1), 2.2vw, var(--step-3));
+  }
+
+  .site-nav {
+    column-gap: 1rem;
+  }
+
+  .site-header .site-search {
+    flex-basis: 8rem;
+  }
+
+  .theme-toggle {
+    padding: 0.4rem;
+    line-height: 1;
+  }
+
+  .theme-toggle .theme-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .theme-toggle .theme-icon {
+    width: 1.15em;
+    height: 1.15em;
+  }
+}
+
+.theme-icon {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Views sit in the shared column. Charts that need more room can use the full
+   width (less the gutters) with grid-column: full, as the arc diagram does. */
 main {
   flex: 1;
   width: 100%;
-  max-width: 72rem;
-  padding: 2rem var(--gutter) 3rem;
+  display: grid;
+  grid-template-columns:
+    [full-start] minmax(var(--gutter), 1fr)
+    [content-start] min(100% - 2 * var(--gutter), var(--page-max))
+    [content-end] minmax(var(--gutter), 1fr) [full-end];
+  align-content: start;
+  padding-block: 2rem 3rem;
+}
+
+main > * {
+  grid-column: content;
 }
 
 .site-footer {
-  padding: 1.25rem var(--gutter);
+  padding: 1.25rem var(--page-pad);
   border-top: 1px solid var(--rule);
   color: var(--ink-muted);
   font-size: var(--step--1);
@@ -321,7 +419,9 @@ main {
    --------------------------------------------------------------------------- */
 .site-search {
   position: relative;
-  flex: 0 1 17rem;
+  /* A small basis so the header wraps only when even that won't fit; it grows back to 17rem. */
+  flex: 1 1 12rem;
+  max-width: 17rem;
   margin: 0;
 }
 
@@ -391,6 +491,7 @@ main {
   .site-search {
     order: 4;
     flex-basis: 100%;
+    max-width: none;
   }
 }
 
@@ -626,6 +727,23 @@ main {
 /* ---------------------------------------------------------------------------
    Arc diagram
    --------------------------------------------------------------------------- */
+/* The chart uses the full window width (less the gutters) so each chapter gets
+   more room; the controls, legend and hint stay aligned with the page column. */
+.arcs-figure {
+  grid-column: full;
+  display: grid;
+  grid-template-columns: subgrid;
+}
+
+.arcs-figure > * {
+  grid-column: content;
+}
+
+.arcs-figure > .arcs-scroll {
+  grid-column: full;
+  margin-inline: var(--gutter);
+}
+
 .arcs-controls {
   display: flex;
   flex-wrap: wrap;
@@ -1054,18 +1172,28 @@ main {
 }
 
 /* ---------------------------------------------------------------------------
-   About: a single reading column of Newsreader prose, sections divided by rules.
+   About: a reading column (~66 characters a line). From 1100px, the thumbnails
+   sit in a margin column beside their sections, as references do in the verse
+   view, and an "On this page" menu stays in view at the right. Narrower, the
+   menu is hidden and each thumbnail sits above its section.
    --------------------------------------------------------------------------- */
 .about {
-  max-width: var(--measure);
+  --about-measure: 31rem;
+  display: grid;
+  grid-template-columns: minmax(0, var(--about-measure));
+  align-items: start;
+}
+
+.about-toc {
+  display: none;
 }
 
 .about-section {
-  padding-block: 1.5rem;
+  padding-block: 1.75rem;
   border-top: 1px solid var(--rule);
 }
 
-.about-section:first-child {
+.about-section:first-of-type {
   border-top: 0;
   padding-top: 0;
 }
@@ -1078,29 +1206,219 @@ main {
   margin: 0 0 0.75rem;
 }
 
-.about p {
+.about-text p {
   font-family: var(--font-text);
   font-size: var(--step-1);
   line-height: 1.6;
   margin: 0 0 1rem;
 }
 
-.about-section > p:last-child {
+.about-text > p:last-child {
   margin-bottom: 0;
 }
 
-.about .about-open {
+.about-text .about-open {
   font-family: var(--font-ui);
   font-size: var(--step-0);
 }
 
-.about-open a::after {
-  display: inline-block; /* keeps the arrow out of the underline */
-  margin-left: 0.3em;
-  content: '→';
-  content: '→' / ''; /* decorative: not read aloud */
+.about-section.about-credits p {
+  font-size: var(--step-0);
 }
 
-.about-credits p {
-  font-size: var(--step-0);
+/* Thumbnails: decorative pictures of each diagram that link to it. */
+.about-thumb {
+  margin: 0 0 1.25rem;
+  max-width: var(--thumb-max, 100%);
+}
+
+.about-thumb a {
+  display: block;
+}
+
+/* The frame holds the thumbnail's space while its SVG loads. */
+.about-thumb-frame {
+  aspect-ratio: var(--thumb-ratio, 4 / 3);
+}
+
+.about-thumb-frame svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Thumbnail marks carry classes, not colours (see scripts/build-thumbs.mjs). */
+.thumb-svg .a-ot {
+  stroke: var(--arc-ot);
+}
+
+.thumb-svg .a-nt {
+  stroke: var(--arc-nt);
+}
+
+.thumb-svg .a-stop-ot {
+  stop-color: var(--arc-ot);
+}
+
+.thumb-svg .a-stop-nt {
+  stop-color: var(--arc-nt);
+}
+
+.thumb-svg .a-axis {
+  fill: var(--ink-muted);
+}
+
+.thumb-svg .c0 {
+  fill: var(--sec-law);
+}
+
+.thumb-svg .c1 {
+  fill: var(--sec-history);
+}
+
+.thumb-svg .c2 {
+  fill: var(--sec-poetry);
+}
+
+.thumb-svg .c3 {
+  fill: var(--sec-prophets);
+}
+
+.thumb-svg .c4 {
+  fill: var(--sec-gospels);
+}
+
+.thumb-svg .c5 {
+  fill: var(--sec-pauline);
+}
+
+.thumb-svg .c6 {
+  fill: var(--sec-general);
+}
+
+.thumb-svg .c7 {
+  fill: var(--sec-revelation);
+}
+
+
+.thumb-svg .g-edge {
+  stroke: var(--ink-muted);
+  stroke-opacity: 0.55;
+}
+
+.thumb-svg .g-ot {
+  fill: var(--arc-ot);
+}
+
+.thumb-svg .g-nt {
+  fill: var(--arc-nt);
+}
+
+.thumb-svg .g-sel {
+  fill: var(--select);
+}
+
+.about-thumb figcaption {
+  margin-top: 0.4rem;
+  color: var(--ink-muted);
+  font-size: var(--step--1);
+  line-height: 1.35;
+}
+
+.about-thumb-arcs {
+  --thumb-ratio: 5 / 2;
+  --thumb-max: 26rem;
+}
+
+.about-thumb-books {
+  --thumb-ratio: 1;
+  --thumb-max: 12rem;
+}
+
+.about-thumb-graph {
+  --thumb-ratio: 4 / 3;
+  --thumb-max: 16rem;
+}
+
+@media (min-width: 1100px) {
+  .about {
+    grid-template-columns: minmax(0, var(--about-measure)) minmax(12rem, 17rem) 11rem;
+    column-gap: clamp(2rem, 3.5vw, 3.5rem);
+  }
+
+  .about-section {
+    grid-column: 1 / 3;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: start;
+  }
+
+  .about-text {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .about-thumb {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0.4rem 0 0;
+  }
+
+  .about-thumb-arcs {
+    --thumb-max: 100%;
+  }
+
+  .about-thumb-books {
+    --thumb-max: 13rem;
+  }
+
+  .about-toc {
+    display: block;
+    grid-column: 3;
+    grid-row: 1 / span 5;
+    position: sticky;
+    top: 1.5rem;
+    border-left: 1px solid var(--rule);
+    padding-left: 1rem;
+    font-size: var(--step--1);
+  }
+}
+
+.about-toc-title {
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+}
+
+.about-toc ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.about-toc a {
+  position: relative;
+  display: block;
+  padding-block: 0.3rem;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.about-toc a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* The current section: ink text and a 2px bar over the menu's rule. */
+.about-toc a[aria-current] {
+  color: var(--ink);
+}
+
+.about-toc a[aria-current]::before {
+  content: '';
+  position: absolute;
+  left: calc(-1rem - 1.5px);
+  top: 0.3rem;
+  bottom: 0.3rem;
+  width: 2px;
+  background: currentColor;
 }

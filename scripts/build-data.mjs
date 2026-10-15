@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { writeThumbs, ARCS_MIN_VOTES } from './build-thumbs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = path.join(ROOT, 'data-raw');
@@ -295,6 +296,20 @@ writeJson('book-matrix.json', {
   matrix, // matrix[fromBook][toBook] = summed votes
 });
 
+// About page thumbnails (static SVGs, coloured by CSS classes). The verse thumbnail is John 3:16.
+const thumbCenter = chapterStart[bookIndex.get('John')][2] + 15;
+const thumbs = writeThumbs(path.join(OUT, 'thumbs'), {
+  chapterCount: globalChapter,
+  ntStartChapter: BOOKS.find((b) => b.testament === 'NT').firstChapter,
+  links: overviewLinks,
+  books: BOOKS,
+  matrix,
+  centerId: thumbCenter,
+  out: outgoing[thumbCenter],
+  incoming: incoming[thumbCenter],
+  isNT: (id) => BOOKS[bookOfVerse[id]].testament === 'NT',
+});
+
 // ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
@@ -315,6 +330,9 @@ console.log(`\nVerses: ${VERSE_COUNT}  (margin notes stripped: ${marginNotesFixe
 console.log(`Cross-refs kept: ${xrefs.length}  (zero votes kept: ${zeroVotes}, negative dropped: ${droppedNegative})`);
 console.log(`Refs remapped: ${JSON.stringify(remapCounts)}`);
 console.log(`Overview links (>= ${OVERVIEW_MIN_VOTES} votes): ${overviewLinks.length}`);
+console.log(
+  `Thumbnails: arcs ${thumbs.arcs.marks} merged arcs (>= ${ARCS_MIN_VOTES} votes), books ${thumbs.books.marks} of ${thumbs.books.of} ribbons, graph ${thumbs.graph.marks} nodes`,
+);
 console.log(`Rows that failed to parse: ${failed.length}`);
 for (const [n, why, line] of failed.slice(0, 20)) console.log(`  line ${n}: ${why}: ${JSON.stringify(line)}`);
 for (const w of warnings) console.log(`Warning: ${w}`);

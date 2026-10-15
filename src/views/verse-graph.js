@@ -2,9 +2,9 @@
 // most 16 nodes). Node colours come from CSS tokens, so theme changes need no redraw.
 import { forceSimulation, forceLink, forceManyBody, scaleSqrt } from 'd3';
 import { attachPreview } from '../preview.js';
+import { strongestLinks } from '../links.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const MAX_LINKS = 15;
 const R = 8; // node radius
 const R_CENTER = 13;
 const ARROW = 7;
@@ -23,12 +23,7 @@ const svg = (tag, attrs = {}) => {
 // Top links by votes across both directions. A verse that both cites and is cited
 // by the centre verse becomes one node with two edges.
 function buildGraph(centerId, out, incoming, index) {
-  const candidates = [
-    ...out.map(([, start, end, votes]) => ({ dir: 'out', other: start, end, votes })),
-    ...incoming.map(([from, , , votes]) => ({ dir: 'in', other: from, end: from, votes })),
-  ]
-    .sort((a, b) => b.votes - a.votes || a.other - b.other)
-    .slice(0, MAX_LINKS);
+  const candidates = strongestLinks(out, incoming);
 
   const nodes = new Map([[centerId, { id: centerId, center: true, label: index.label(centerId, true), dirs: new Set() }]]);
   const edges = [];

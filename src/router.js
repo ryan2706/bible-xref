@@ -5,7 +5,7 @@ const routes = [
   { pattern: /^#\/verse\/([^/]+)$/, view: 'verse' },
   { pattern: /^#\/arcs(?:\?(.*))?$/, view: 'arcs' }, // ?min=30&book=Isa
   { pattern: /^#\/books(?:\?(.*))?$/, view: 'books' }, // ?book=Isa or ?pair=Isa-Matt, &self=1
-  { pattern: /^#\/about$/, view: 'about' },
+  { pattern: /^#\/about(?:\?(.*))?$/, view: 'about' }, // ?s=arcs scrolls to a section
 ];
 
 export function matchRoute(hash) {
