@@ -47,10 +47,11 @@ function arcsSvg({ chapterCount: N, ntStartChapter, links }) {
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(`<path d="${d}"/>`);
   }
-  // Cross-Testament arcs shade lapis to gold. The gradient uses each arc's own
-  // bounding box, which runs from its OT end to its NT end.
+  // Cross-Testament arcs are lapis up to their apex and gold down from it, as in
+  // the Arcs view. The gradient uses each arc's own bounding box, which runs from
+  // its OT end to its NT end, so a hard stop at 50% falls on the apex.
   let body =
-    '<defs><linearGradient id="thumb-arcs-x"><stop offset="0" class="a-stop-ot"/><stop offset="1" class="a-stop-nt"/></linearGradient></defs>' +
+    '<defs><linearGradient id="thumb-arcs-x"><stop offset="0" class="a-stop-ot"/><stop offset=".5" class="a-stop-ot"/><stop offset=".5" class="a-stop-nt"/><stop offset="1" class="a-stop-nt"/></linearGradient></defs>' +
     `<g fill="none" stroke-width=".75">`;
   for (const [g, paths] of [...groups].sort()) {
     const [kind, level] = g.split(' ');

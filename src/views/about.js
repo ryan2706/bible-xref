@@ -37,7 +37,7 @@ const SECTIONS = [
     thumb: 'arcs',
     caption: `Chapter pairs with ${ARCS_MIN_VOTES} or more votes, Genesis to Revelation`,
     body: [
-      'Every chapter from Genesis to Revelation sits on one line, and each arc joins two chapters that cross-reference each other. Lapis arcs stay within the Old Testament, gold arcs within the New, and arcs shading from lapis to gold cross between the Testaments. Where many arcs overlap, the colour builds up, so dense bands show the most connected passages.',
+      'Every chapter from Genesis to Revelation sits on one line, and each arc joins two chapters that cross-reference each other. Lapis arcs stay within the Old Testament, gold arcs within the New, and arcs that cross between the Testaments turn from lapis to gold at their highest point. Where many arcs overlap, the colour deepens, so dense bands show the most connected passages.',
       'The “Minimum votes” slider starts at 50 to keep the picture readable; lower it to see more links. Choose a book to show only the links that touch it. Hover over, tap or arrow to a chapter to highlight its arcs in vermilion; click or press Enter to read it.',
     ],
   },

@@ -72,11 +72,19 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   can't all fit), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
   canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`, and `&ch=Isa.53`
   starts with that chapter highlighted and keeps the pinned chapter in the URL; on phones that chapter is described
-  in an inline line under the controls instead of the popover),
+  in an inline line under the controls instead of the popover; the "how to read" hint sits above the chart; up to
+  three numbered notes (Psalms and Isaiah, Paul's letters, the Synoptics) with numbers worked out from the arcs shown,
+  markers on the axis, and hover/focus/click highlighting their arcs; hidden while a book is chosen or by the "Show notes"
+  box, kept in localStorage `arcs-notes-hidden`; below 720px the chart opens fitted to the screen, where a tap selects
+  a whole book (chapters are ~0.3px wide) and the inline line offers "Zoom in to <Book>" and previous/next book buttons
+  (one-chapter books are under a pixel wide); "Zoom in" switches to the
+  1700px sideways-scrolling chart, `&zoom=1`, where taps pick chapters),
   `books.js` (chord diagram: ribbons on the same three stacked canvases with `isPointInPath` hit testing,
-  book arcs and labels in an SVG overlay; labels never leave their section's span, and crowded runs
-  collapse into one group label like "Minor Prophets"; details panel that becomes a bottom sheet below 720px;
-  state in `#/books?pair=Isa-Matt`, `?book=Isa`, `&self=1`), `about.js` (About: reading column of
+  book arcs and labels in an SVG overlay, 11px on phones and 12px otherwise; labels never leave their section's span,
+  and crowded runs collapse into one group label like "Minor Prophets" or "3 books", which selects the whole run
+  (its preview lists the books, its panel lets you choose one); details panel that becomes a bottom sheet below 720px;
+  with no selection in the URL it opens on Isaiah (`START_BOOK`), its panel under the chart even on phones, with three
+  suggested pairs; state in `#/books?pair=Isa-Matt`, `?book=Isa`, `?books=Nah-Zeph`, `&self=1`), `about.js` (About: reading column of
   ~66 characters, from 1100px a margin column of diagram thumbnails and a sticky "On this page" menu; below that,
   thumbnails sit above their sections; `#/about?s=arcs` opens at a section; thumbnails are the build's static SVGs,
   inlined so the theme tokens colour them), `placeholders.js` (not found).
@@ -90,7 +98,7 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   verses at 6 widths in both themes ("John 10:28" in John 3:16, "Rom 5:10" in Rom 5:6 and "1 Tim 1:15" in
   Luke 19:10 must stay visible).
 - Canvas performance: never stroke per-arc with `multiply` (Chrome re-reads the canvas per stroke,
-  ~100x slower). Accumulate on a transparent offscreen canvas and multiply that once, as `arcs.js` does.
+  ~100x slower). If a blend mode is ever needed, accumulate on a transparent offscreen canvas and blend that once.
 
 ## New view checklist
 
@@ -213,9 +221,11 @@ separation, normal-vision floor, ≥3:1 against the background):
 
 Chart rules:
 
-- **Arc diagram**: lapis for OT→OT, gold for NT→NT, a lapis→gold gradient for OT↔NT.
-  Thin low-opacity strokes; `globalCompositeOperation` is `lighter` (additive) in dark
-  mode and `multiply` in light mode so dense areas build up in both. Votes slider defaults to ~50.
+- **Arc diagram**: lapis for OT→OT, gold for NT→NT; an OT↔NT arc is lapis up to its apex and gold
+  down from it (never a blended gradient, which turns grey-brown). Thin low-opacity strokes with normal
+  (`source-over`) blending in both themes, so dense areas build up to the pigment itself, never grey (multiply)
+  or pale yellow (additive). Arcs between busy chapters (NT letters, Psalms) are fainter, so dense areas still show
+  single arcs. Votes slider defaults to ~50.
 - **Vermilion means selection** in the arc and verse views, and nothing else. When something
   is selected there, every other mark switches to `--dim`.
 - **The chord diagram never uses vermilion**, because the Prophets pigment is also a vermilion.

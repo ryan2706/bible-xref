@@ -1139,6 +1139,26 @@ main > * {
   font-size: var(--step--1);
 }
 
+.arcs-chapter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.arcs-step {
+  font: inherit;
+  color: var(--link);
+  background: none;
+  border: 0;
+  min-height: 2.25rem;
+  padding: 0.25rem 0;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+
 .arcs-chapter strong {
   font-family: var(--font-text);
   font-size: var(--step-0);
@@ -1186,11 +1206,135 @@ main > * {
 .arcs-hint {
   color: var(--ink-muted);
   font-size: var(--step--1);
-  margin: 0.5rem 0 0;
+  margin: 0 0 0.75rem;
+}
+
+.arcs-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  cursor: pointer;
+}
+
+.arcs-check input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  accent-color: var(--ink-muted);
+}
+
+/* Phones: switches between the fitted and the sideways-scrolling chart. */
+.arcs-zoom {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--ink-muted);
+  border-radius: 999px;
+  min-height: 2.25rem;
+  padding: 0.25rem 0.9rem;
+  cursor: pointer;
+}
+
+.arcs-zoom:hover {
+  background: color-mix(in srgb, var(--ink) 6%, var(--paper));
+}
+
+/* Notes on what's worth seeing, numbered like their markers on the chart. */
+.arcs-notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.25rem 2rem;
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  font-size: var(--step--1);
+}
+
+.arcs-note {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  font: inherit;
+  line-height: 1.4;
+  color: var(--ink-muted);
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 0.3rem 0;
+  cursor: pointer;
+}
+
+.arcs-note strong {
+  display: block;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Phones: the chart comes first, so the notes move under it. */
+@media (max-width: 720px) {
+  .arcs-notes {
+    order: 1;
+    margin: 0.75rem 0 0;
+  }
+
+  .arcs-figure > .legend {
+    order: 2;
+  }
+}
+
+.arcs-note:hover strong,
+.arcs-note[aria-pressed='true'] strong {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.arcs-note-num,
+.arcs-marker-dot {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  border: 1px solid var(--ink-muted);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.arcs-note-num {
+  margin-top: 0.05rem;
+}
+
+.arcs-note[aria-pressed='true'] .arcs-note-num,
+.arcs-note:hover .arcs-note-num,
+.arcs-marker-dot.is-active {
+  background: var(--select);
+  border-color: var(--select);
+  color: var(--paper);
+}
+
+.arcs-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.arcs-marker-dot {
+  position: absolute;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  width: 16px;
+  height: 16px;
+  transform: translateX(-50%);
 }
 
 .swatch.cross {
-  background: linear-gradient(90deg, var(--arc-ot), var(--arc-nt));
+  background: linear-gradient(90deg, var(--arc-ot) 50%, var(--arc-nt) 50%);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1513,6 +1657,39 @@ main > * {
     border-radius: 2px;
     background: var(--rule);
   }
+}
+
+/* Phones: the opening selection's details sit under the chart, not in a sheet. */
+@media (max-width: 720px) {
+  .books-panel.is-intro {
+    position: static;
+    z-index: auto;
+    max-height: none;
+    overflow: visible;
+    background: none;
+    border: 0;
+    border-top: 1px solid var(--rule);
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0.75rem 0 0;
+    transform: none;
+    visibility: visible;
+    transition: none;
+  }
+
+  .books-panel.is-intro::before {
+    content: none;
+  }
+}
+
+.books-panel-lead {
+  color: var(--ink-muted);
+  margin: 0 0 0.75rem;
+}
+
+.books-suggest .books-partner-name {
+  font-family: var(--font-text);
+  font-size: var(--step-0);
 }
 
 @media (prefers-reduced-motion: reduce) {

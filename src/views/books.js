@@ -26,6 +26,10 @@ const PREVIEW_BOOKS = 5;
 const PANEL_BOOKS = 10;
 const TOP_PAIRS = 10;
 const TEXT_CHARS = 110;
+// The view opens on this book, so the first thing people see is one book's links
+// rather than all 2,000 ribbons at once, with these pairs to try next.
+const START_BOOK = 'Isa';
+const SUGGESTED_PAIRS = [['Isa', 'Matt'], ['Ps', 'Heb'], ['Gen', 'Rev']];
 
 // Names for a run of unlabelled books that all belong to one of these parts of a
 // section (books.json `section`), longest first. Other runs get a range ("1 Thess–Phlm").
@@ -56,35 +60,48 @@ const angleGap = (a, b) => {
   return Math.min(d, TAU - d);
 };
 const same = (x, y) => x === y || (!!x && !!y && x.type === y.type && x.a === y.a && x.b === y.b);
+// The books a selection covers: one, a pair, or a run under a group label (a..b).
+const booksOf = (sel) => (sel.type === 'group' ? Array.from({ length: sel.b - sel.a + 1 }, (_, k) => sel.a + k) : sel.type === 'pair' ? [sel.a, sel.b] : [sel.a]);
 
 function trim(text) {
   if (text.length <= TEXT_CHARS) return text;
   return text.slice(0, text.lastIndexOf(' ', TEXT_CHARS)) + ' …';
 }
 
-// The selection lives in the hash so it can be shared: #/books?pair=Isa-Matt or
-// #/books?book=Isa, plus &self=1 when links within a book are shown.
+// The selection lives in the hash so it can be shared: #/books?pair=Isa-Matt,
+// #/books?book=Isa or #/books?books=Nah-Zeph (a run of books under one group
+// label), plus &self=1 when links within a book are shown. With no selection in
+// the hash the view opens on START_BOOK (`intro`).
 function readQuery(query, index) {
   const params = new URLSearchParams(query);
   const find = (abbr) => (abbr ? index.books.find((b) => b.abbr.toLowerCase() === abbr.toLowerCase()) ?? null : null);
   let self = params.get('self') === '1';
   let pin = null;
-  const parts = (params.get('pair') ?? '').split('-');
-  const [a, b] = parts.map(find);
-  if (parts.length === 2 && a && b) {
-    pin = { type: 'pair', a: Math.min(a.index, b.index), b: Math.max(a.index, b.index) };
-    if (a === b) self = true; // a link within one book only exists with self-links shown
+  const pair = (key) => {
+    const parts = (params.get(key) ?? '').split('-');
+    const [a, b] = parts.map(find);
+    return parts.length === 2 && a && b ? [Math.min(a.index, b.index), Math.max(a.index, b.index)] : null;
+  };
+  const p = pair('pair'), run = pair('books');
+  if (p) {
+    pin = { type: 'pair', a: p[0], b: p[1] };
+    if (p[0] === p[1]) self = true; // a link within one book only exists with self-links shown
+  } else if (run && run[0] < run[1] && index.books[run[0]].section === index.books[run[1]].section) {
+    pin = { type: 'group', a: run[0], b: run[1] };
   } else {
     const book = find(params.get('book'));
     if (book) pin = { type: 'book', a: book.index };
   }
-  return { self, pin };
+  const intro = !pin && !params.has('pair') && !params.has('book') && !params.has('books');
+  if (intro) pin = { type: 'book', a: find(START_BOOK).index };
+  return { self, pin, intro };
 }
 
 function writeQuery(self, pin, index) {
   const params = new URLSearchParams();
   const abbr = (i) => index.books[i].abbr;
   if (pin?.type === 'pair') params.set('pair', `${abbr(pin.a)}-${abbr(pin.b)}`);
+  if (pin?.type === 'group') params.set('books', `${abbr(pin.a)}-${abbr(pin.b)}`);
   if (pin?.type === 'book') params.set('book', abbr(pin.a));
   if (self) params.set('self', '1');
   const query = params.toString();
@@ -180,6 +197,7 @@ function buildChart(figure, index, matrix, initial) {
   let pin = initial.pin; // chosen by click, second tap, Enter or the URL; drives the panel
   let hover = null; // mouse hover, a first tap or the keyboard cursor
   let sticky = false; // hover came from a tap or the keyboard, so it outlasts pointerleave
+  let intro = initial.intro; // showing START_BOOK because nothing was chosen yet
   let cursor = pin?.a ?? 0; // keyboard position
   let lastPointer = 'mouse';
   let L = null; // layout
@@ -196,13 +214,13 @@ function buildChart(figure, index, matrix, initial) {
   function layout() {
     const W = Math.round(Math.max(260, Math.min(MAX_SIZE, chart.clientWidth)));
     const narrow = W < NARROW;
-    const font = narrow ? 9 : 12;
+    const font = narrow ? 11 : 12;
     const fontFamily = themeColor('--font-ui');
     measurer.font = `400 ${font}px ${fontFamily}`;
     const width = (t) => measurer.measureText(t).width;
 
     // Full names where they fit the label band, short names (“1 Thess”) where they don't.
-    const maxRoom = narrow ? 30 : 92;
+    const maxRoom = narrow ? 36 : 92;
     const names = books.map((b) => (width(b.name) <= maxRoom ? b.name : index.shortName(b)));
     const widths = names.map(width);
     const room = Math.ceil(Math.max(...widths));
@@ -491,15 +509,16 @@ function buildChart(figure, index, matrix, initial) {
   // Dims the arcs and labels of books not linked to the selection.
   function updateOverlay(sel, list) {
     const linked = new Set();
+    const active = new Set(sel ? booksOf(sel) : []);
     if (sel) {
-      linked.add(sel.a).add(sel.b ?? sel.a);
+      for (const i of active) linked.add(i);
       for (const c of list) linked.add(c.a).add(c.b);
     }
     for (let i = 0; i < N; i++) arcEls[i].classList.toggle('is-dim', !!sel && !linked.has(i));
     // A group label counts as linked or active if any of its books is.
     L.labels.forEach((l, n) => {
       labelEls[n].classList.toggle('is-dim', !!sel && !l.books.some((i) => linked.has(i)));
-      labelEls[n].classList.toggle('is-active', !!sel && l.books.some((i) => i === sel.a || i === sel.b));
+      labelEls[n].classList.toggle('is-active', !!sel && l.books.some((i) => active.has(i)));
     });
   }
 
@@ -540,7 +559,8 @@ function buildChart(figure, index, matrix, initial) {
     dimStale = false;
   }
 
-  const chordsOf = (sel) => (sel.type === 'book' ? L.byBook[sel.a] : [L.byPair.get(`${sel.a}-${sel.b}`)].filter(Boolean));
+  const chordsOf = (sel) =>
+    sel.type === 'pair' ? [L.byPair.get(`${sel.a}-${sel.b}`)].filter(Boolean) : [...new Set(booksOf(sel).flatMap((i) => L.byBook[i]))];
 
   // The only drawing on hover: the selection's ribbons in their pigments, over the dim layer.
   function drawHighlight() {
@@ -590,13 +610,13 @@ function buildChart(figure, index, matrix, initial) {
       if (gap < bestGap && r <= L.rLabel + l.width + 6) [best, bestGap] = [l, gap];
     }
     if (!best) return null;
-    const near = (i) => angleGap(a, (L.groups[i].startAngle + L.groups[i].endAngle) / 2);
-    return { type: 'book', a: best.books.reduce((x, y) => (near(y) < near(x) ? y : x)) };
+    // A group label ("Minor Prophets", "3 books") stands for its run of books.
+    return best.kind === 'group' ? { type: 'group', a: best.books[0], b: best.books.at(-1) } : { type: 'book', a: best.books[0] };
   }
 
   // --- Previews and announcements -----------------------------------------------------------
   function actionText(sel, how) {
-    const what = sel.type === 'book' ? 'for its strongest links' : 'to see the top verse pairs';
+    const what = { book: 'for its strongest links', pair: 'to see the top verse pairs', group: 'to choose one of them' }[sel.type];
     return { touch: `Tap again ${what}.`, key: `Press Enter ${what}.`, mouse: `Click ${what}.` }[how];
   }
 
@@ -604,8 +624,29 @@ function buildChart(figure, index, matrix, initial) {
     return a === b ? `Within ${name(a)}` : `${name(a)} and ${name(b)}`;
   }
 
+  // A run under a group label: the part's name ("Minor Prophets") when the run is
+  // the whole part, else its first and last books.
+  function groupTitle({ a, b }) {
+    const part = books[a].section;
+    const whole = books.filter((x) => x.section === part);
+    return part in GROUP_NAMES && whole[0].index === a && whole.at(-1).index === b ? part : `${name(a)} to ${name(b)}`;
+  }
+
+  const titleOf = (sel) => (sel.type === 'book' ? name(sel.a) : sel.type === 'group' ? groupTitle(sel) : pairTitle(sel.a, sel.b));
+  const totalOf = (i) => partners[i].reduce((s, [, v]) => s + v, 0);
+
   function previewNote(sel, how) {
     const action = h('span', { class: 'preview-action' }, actionText(sel, how));
+    if (sel.type === 'group') {
+      const run = booksOf(sel);
+      return h(
+        'div',
+        {},
+        h('span', {}, `${run.length} books, votes to and from other books:`),
+        h('ol', { class: 'preview-list' }, run.map((i) => h('li', {}, h('span', {}, name(i)), votesEl(totalOf(i))))),
+        action,
+      );
+    }
     if (sel.type === 'book') {
       const top = partners[sel.a].slice(0, PREVIEW_BOOKS);
       return h(
@@ -648,6 +689,10 @@ function buildChart(figure, index, matrix, initial) {
       // so a second tap can reach the book or ribbon.
       placeMarker(0, 0);
       marker.style.width = marker.style.height = `${L.W}px`;
+    } else if (sel.type === 'group') {
+      const l = L.labels.find((x) => x.kind === 'group' && x.books[0] === sel.a);
+      const [x, y] = pt(L.rLabel + (l?.width ?? 0) + 4, l?.angle ?? 0);
+      placeMarker(L.W / 2 + x, L.W / 2 + y);
     } else if (sel.type === 'book') {
       // At the end of the book's label, or beside its arc if it has no label of its own.
       const l = L.labels[L.labelOf[sel.a]];
@@ -657,7 +702,8 @@ function buildChart(figure, index, matrix, initial) {
     } else if (at) {
       placeMarker(at[0], at[1] + 12);
     }
-    showPreview(marker, sel.type === 'book' ? name(sel.a) : pairTitle(sel.a, sel.b), previewNote(sel, how));
+    showPreview(marker, titleOf(sel), previewNote(sel, how));
+    if (announce && sel.type === 'group') live.textContent = `${titleOf(sel)}: ${booksOf(sel).map(name).join(', ')}.`;
     if (announce && sel.type === 'book') {
       const top = partners[sel.a].slice(0, 3).map(([j]) => name(j));
       live.textContent = `${name(sel.a)}, ${SECTIONS[secOf[sel.a]].name}. Most linked to ${top.join(', ')}.`;
@@ -667,6 +713,7 @@ function buildChart(figure, index, matrix, initial) {
   // --- Selection and panel ------------------------------------------------------------------
   function setPin(sel, { focusPanel = false } = {}) {
     pin = sel;
+    intro = false;
     if (sel) cursor = sel.a;
     updateCursor();
     hover = null;
@@ -678,7 +725,7 @@ function buildChart(figure, index, matrix, initial) {
     if (focusPanel || (sel && sheetQuery.matches && document.activeElement === chart)) {
       panel.querySelector('h2')?.focus();
     }
-    if (sel) live.textContent = `${sel.type === 'book' ? name(sel.a) : pairTitle(sel.a, sel.b)}: details shown${sheetQuery.matches ? '' : ' beside the chart'}.`;
+    if (sel) live.textContent = `${titleOf(sel)}: details shown${sheetQuery.matches ? '' : ' beside the chart'}.`;
   }
 
   let panelToken = 0;
@@ -686,11 +733,37 @@ function buildChart(figure, index, matrix, initial) {
   function renderPanel() {
     const mine = ++panelToken;
     const heading = (text) => h('h2', { id: 'books-panel-title', class: 'books-panel-title', tabindex: '-1' }, text);
-    panel.classList.toggle('is-open', !!pin);
+    // On phones the panel is a bottom sheet, except for the opening selection,
+    // which sits under the chart so it doesn't cover it.
+    panel.classList.toggle('is-open', !!pin && !intro);
+    panel.classList.toggle('is-intro', intro);
+    const find = (abbr) => books.find((b) => b.abbr === abbr).index;
+    const suggestions = () =>
+      h(
+        'div',
+        { class: 'books-suggest' },
+        h('h3', {}, 'Pairs to try'),
+        h(
+          'ul',
+          { class: 'books-partners' },
+          SUGGESTED_PAIRS.map(([x, y]) => {
+            const [a, b] = [find(x), find(y)].sort((m, n) => m - n);
+            const button = h(
+              'button',
+              { type: 'button', class: 'books-partner' },
+              h('span', { class: 'books-partner-name' }, pairTitle(a, b)),
+              votesEl(matrix[a][b] + matrix[b][a]),
+            );
+            button.addEventListener('click', () => setPin({ type: 'pair', a, b }, { focusPanel: true }));
+            return h('li', {}, button);
+          }),
+        ),
+      );
     if (!pin) {
       panel.replaceChildren(
         heading('Details'),
         h('p', { class: 'status' }, 'Click a book or a ribbon to list its strongest links here.'),
+        suggestions(),
       );
       return;
     }
@@ -705,6 +778,32 @@ function buildChart(figure, index, matrix, initial) {
       return b;
     };
 
+    if (pin.type === 'group') {
+      const run = booksOf(pin);
+      const max = Math.max(...run.map(totalOf));
+      panel.replaceChildren(
+        h('div', { class: 'books-panel-head' }, heading(groupTitle(pin)), close),
+        h('p', { class: 'books-panel-meta' }, `${run.length} books in ${SECTIONS[secOf[pin.a]].name}`),
+        h('h3', {}, 'Choose a book'),
+        h(
+          'ol',
+          { class: 'books-partners' },
+          run.map((j) => {
+            const b = h(
+              'button',
+              { type: 'button', class: 'books-partner' },
+              h('span', { class: 'books-partner-name' }, name(j)),
+              votesEl(totalOf(j)),
+              h('span', { class: 'books-bar', style: `--c: var(${SECTIONS[secOf[j]].token}); --w: ${(totalOf(j) / max) * 100}%`, 'aria-hidden': 'true' }),
+            );
+            b.addEventListener('click', () => setPin({ type: 'book', a: j }, { focusPanel: true }));
+            return h('li', {}, b);
+          }),
+        ),
+      );
+      return;
+    }
+
     if (pin.type === 'book') {
       const i = pin.a;
       const list = partners[i];
@@ -712,6 +811,7 @@ function buildChart(figure, index, matrix, initial) {
       const max = top[0]?.[1] ?? 1;
       const totalVotes = list.reduce((s, [, v]) => s + v, 0);
       panel.replaceChildren(
+        ...(intro ? [h('p', { class: 'books-panel-lead' }, `To start, ${name(i)} is selected. Choose any book or ribbon in the chart to see its links here instead.`)] : []),
         h('div', { class: 'books-panel-head' }, heading(name(i)), close),
         h('p', { class: 'books-panel-meta' }, `${SECTIONS[secOf[i]].name} · ${votesText(totalVotes)} to and from other books`),
         h('h3', {}, 'Most linked books'),
@@ -731,6 +831,7 @@ function buildChart(figure, index, matrix, initial) {
           }),
         ),
         h('p', { class: 'books-panel-more' }, h('a', { href: `#/arcs?book=${books[i].abbr}` }, `See ${name(i)} chapter by chapter in the arc diagram`)),
+        ...(intro ? [suggestions()] : []),
       );
       return;
     }
@@ -903,7 +1004,7 @@ function buildChart(figure, index, matrix, initial) {
     L = layout();
     buildOverlay();
     drawAll();
-    writeQuery(self, pin, index);
+    writeQuery(self, intro ? null : pin, index);
     renderPanel();
   });
 
@@ -941,6 +1042,6 @@ function buildChart(figure, index, matrix, initial) {
   drawAll();
   updateHint();
   renderPanel();
-  if (pin) writeQuery(self, pin, index); // normalise the URL (e.g. pair order)
+  if (pin && !intro) writeQuery(self, pin, index); // normalise the URL (e.g. pair order)
   observer.observe(chart);
 }
