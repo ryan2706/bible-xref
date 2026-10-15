@@ -91,6 +91,17 @@ export function attachPreview(el, index, id, title) {
   el.addEventListener('blur', hide);
 }
 
+// A short fixed note (e.g. what votes are) on `el`, a button: hover, focus or a
+// click/tap opens it; Escape, blur or moving the pointer away closes it.
+export function attachNote(el, title, note) {
+  const open = () => show(el, title, note);
+  el.addEventListener('mouseenter', open);
+  el.addEventListener('focus', open);
+  el.addEventListener('click', open);
+  el.addEventListener('mouseleave', scheduleHide);
+  el.addEventListener('blur', hide);
+}
+
 // For things that aren't single elements, like a chapter on the arc canvas: shows
 // `title` and a short note (a string or an element, e.g. a list) next to `anchor`
 // until hidePreview() is called.

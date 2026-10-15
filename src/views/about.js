@@ -1,5 +1,6 @@
 import { h } from '../dom.js';
 import { loadThumb } from '../data.js';
+import { VOTES_HELP } from '../votes.js';
 
 const ARCS_MIN_VOTES = 50; // as drawn by scripts/build-thumbs.mjs: the arc diagram's default
 
@@ -13,7 +14,7 @@ const SECTIONS = [
     title: 'What this is',
     body: [
       'A cross-reference points from one verse to another that speaks to the same person, event, promise or phrase. Printed reference Bibles keep them in the margin; this site gathers about 340,000 of them so you can see how passages connect across the whole Bible, from a single verse up to whole books.',
-      'Each cross-reference has a vote count: readers marked whether they found the link helpful. Higher votes mean a stronger, more widely recognised connection, so every view sorts, filters or sizes links by votes. Links with no votes are kept but drawn faintly.',
+      `Every cross-reference has a vote count. ${VOTES_HELP} Every view sorts, filters or sizes links by votes; links with no votes are kept but drawn faintly.`,
     ],
   },
   {

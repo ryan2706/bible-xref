@@ -3,19 +3,23 @@ import { loadBooks, loadVerses, loadXrefs } from '../data.js';
 import { getIndex } from '../refs.js';
 import { attachPreview } from '../preview.js';
 import { renderGraph } from './verse-graph.js';
+import { votesEl, votesHelp } from '../votes.js';
 
 const TOP = 10;
+const WELCOME_KEY = 'welcome-dismissed';
+const STARTERS = ['Gen.1.1', 'Ps.23.1', 'Isa.53.5', 'John.1.1'];
 
 export async function renderVerse(container, [ref]) {
   const title = h('h1', { class: 'view-title', tabindex: '-1' }, ref.replaceAll('.', ' '));
-  const reading = h('div', { class: 'reading-column' }, h('p', { class: 'status' }, 'Loading verse…'));
+  const textBox = h('div', { class: 'verse-text-box' }, h('p', { class: 'status' }, 'Loading verse…'));
+  const reading = h('div', { class: 'reading-column' }, textBox);
   const margin = h(
     'aside',
     { class: 'margin-column', 'aria-label': 'Cross-references', 'aria-busy': 'true' },
     h('p', { class: 'status' }, 'Loading cross-references…'),
   );
   const graph = h('section', { class: 'graph-section', 'aria-labelledby': 'graph-title' });
-  container.replaceChildren(title, h('div', { class: 'verse-layout' }, reading, margin, graph));
+  container.replaceChildren(...welcomeBand(title), title, h('div', { class: 'verse-layout' }, reading, margin, graph));
 
   try {
     const books = await loadBooks();
@@ -24,7 +28,7 @@ export async function renderVerse(container, [ref]) {
     const id = index.parseOsis(ref);
     if (id === null) {
       title.textContent = 'Verse not found';
-      reading.replaceChildren(
+      textBox.replaceChildren(
         h('p', {}, `No verse matches “${ref}”. Use a reference like `, h('a', { href: '#/verse/John.3.16' }, 'John.3.16'), '.'),
       );
       margin.remove();
@@ -36,11 +40,12 @@ export async function renderVerse(container, [ref]) {
     title.textContent = name;
     document.title = `${name} · Bible Cross-Reference Explorer`;
     graph.replaceChildren(h('h2', { id: 'graph-title' }, 'Connections'), h('p', { class: 'status' }, 'Loading connections…'));
+    reading.append(verseNav(verse, index, title));
 
     // Verse text and cross-references load in parallel; each fills in when ready.
     const textLoad = loadVerses(verse.book.abbr).then(({ firstId, text }) => {
       if (!title.isConnected) return;
-      reading.replaceChildren(h('p', { class: 'verse-text is-selected' }, text[verse.id - firstId]));
+      textBox.replaceChildren(h('p', { class: 'verse-text is-selected' }, text[verse.id - firstId]));
     });
     const xrefLoad = loadXrefs(verse.book.abbr).then((xrefs) => {
       if (!title.isConnected) return;
@@ -51,7 +56,7 @@ export async function renderVerse(container, [ref]) {
     await Promise.all([textLoad, xrefLoad]);
   } catch {
     if (!title.isConnected) return;
-    reading.replaceChildren(h('p', {}, 'Couldn’t load the verse data. Check your connection and reload the page.'));
+    textBox.replaceChildren(h('p', {}, 'Couldn’t load the verse data. Check your connection and reload the page.'));
     margin.remove();
     graph.remove();
   }
@@ -62,6 +67,110 @@ function renderMargin(margin, out, incoming, index) {
   margin.replaceChildren(
     refGroup('refs-out', 'References', out, (l) => [l[1], l[2]], 'This verse doesn’t reference any others.', index),
     refGroup('refs-in', 'Referenced by', incoming, (l) => [l[0], l[0]], 'No verses reference this one.', index),
+  );
+  // The "?" explaining votes goes by the first "Sorted by votes" on the page.
+  margin.querySelector('.ref-note')?.append(' ', votesHelp());
+}
+
+// First-visit welcome above the verse: what the site is, what a cross-reference is,
+// and places to start. Dismissing it is remembered in this browser.
+function welcomeBand(title) {
+  try {
+    if (localStorage.getItem(WELCOME_KEY)) return [];
+  } catch {}
+  const dismiss = h('button', { type: 'button', class: 'welcome-dismiss' }, 'Dismiss');
+  const band = h(
+    'section',
+    { class: 'welcome', 'aria-label': 'Welcome' },
+    h(
+      'p',
+      { class: 'welcome-lead' },
+      'This site maps about 340,000 cross-references, so you can follow one verse to the others that echo it, or see the connections across the whole Bible at once.',
+    ),
+    h(
+      'p',
+      { class: 'welcome-note' },
+      'A cross-reference points from one verse to another that speaks of the same person, event, promise or phrase, like the references in the margin of a study Bible.',
+    ),
+    h(
+      'div',
+      { class: 'welcome-starts' },
+      h('p', { class: 'welcome-label', id: 'welcome-starts-label' }, 'Start with a verse'),
+      h(
+        'ul',
+        { 'aria-labelledby': 'welcome-starts-label' },
+        ...STARTERS.map((osis) => h('li', {}, h('a', { href: `#/verse/${osis}`, 'data-osis': osis }, osis.replace(/\.(\d+)\.(\d+)$/, ' $1:$2')))),
+      ),
+      h('p', { class: 'welcome-label', id: 'welcome-whole-label' }, 'Or see the whole Bible'),
+      h(
+        'ul',
+        { 'aria-labelledby': 'welcome-whole-label' },
+        h('li', {}, h('a', { href: '#/arcs' }, 'Chapter arcs')),
+        h('li', {}, h('a', { href: '#/books' }, 'Book links')),
+      ),
+    ),
+    dismiss,
+  );
+  dismiss.addEventListener('click', () => {
+    try {
+      localStorage.setItem(WELCOME_KEY, '1');
+    } catch {}
+    band.remove();
+    title.focus();
+  });
+  // Full book names for the starting verses once books.json is in (it usually already is).
+  loadBooks().then((books) => {
+    const index = getIndex(books);
+    for (const a of band.querySelectorAll('[data-osis]')) a.textContent = index.label(index.parseOsis(a.dataset.osis));
+  }).catch(() => {});
+  return [band];
+}
+
+// Previous/next verse (ids are consecutive across chapters and books) and a link to
+// the verse's chapter on the arc diagram. ← and → also step, outside form fields.
+function verseNav(verse, index, title) {
+  const lastId = index.books.at(-1).lastId;
+  const step = (dir, id, keys) => {
+    const exists = id >= 0 && id <= lastId;
+    const button = h(
+      'button',
+      { type: 'button', class: `verse-step verse-step-${dir}`, 'aria-keyshortcuts': keys, ...(exists ? {} : { disabled: '' }) },
+      h(
+        'span',
+        { class: 'verse-step-dir' },
+        ...(dir === 'prev'
+          ? [h('span', { 'aria-hidden': 'true' }, '← '), 'Previous verse']
+          : ['Next verse', h('span', { 'aria-hidden': 'true' }, ' →')]),
+      ),
+      h('span', { class: 'verse-step-ref' }, exists ? index.label(id) : dir === 'prev' ? 'Start of the Bible' : 'End of the Bible'),
+    );
+    if (exists) button.addEventListener('click', () => (location.hash = `#/verse/${index.osis(id)}`));
+    return button;
+  };
+  const prev = step('prev', verse.id - 1, 'ArrowLeft');
+  const next = step('next', verse.id + 1, 'ArrowRight');
+
+  const onKey = (e) => {
+    if (!title.isConnected) return document.removeEventListener('keydown', onKey);
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.target.closest?.('input, textarea, select, [contenteditable="true"], [role="listbox"]')) return;
+    const button = e.key === 'ArrowLeft' ? prev : e.key === 'ArrowRight' ? next : null;
+    if (!button || button.disabled) return;
+    e.preventDefault();
+    button.click();
+  };
+  document.addEventListener('keydown', onKey);
+
+  return h(
+    'nav',
+    { class: 'verse-nav', 'aria-label': 'Nearby verses' },
+    h('div', { class: 'verse-steps' }, prev, next),
+    h(
+      'p',
+      { class: 'verse-chapter-link' },
+      h('a', { href: `#/arcs?ch=${verse.book.abbr}.${verse.chapter}` }, 'See this chapter on the arc diagram'),
+    ),
+    h('p', { class: 'verse-keys' }, 'Press ← or → to step through verses.'),
   );
 }
 
@@ -87,7 +196,7 @@ function refGroup(id, heading, links, target, emptyText, index) {
       'li',
       { class: votes === 0 ? 'is-faint' : '' },
       a,
-      h('span', { class: 'votes' }, String(votes), h('span', { class: 'visually-hidden' }, votes === 1 ? ' vote' : ' votes')),
+      votesEl(votes),
     );
   });
   list.append(...items.slice(0, TOP));

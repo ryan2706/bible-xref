@@ -57,9 +57,11 @@ export function getIndex(books) {
   }
 
   const shortName = (book) => book.abbr.replace(/^(\d)/, '$1 ');
+  // A single psalm is "Psalm 23"; the book as a whole stays "Psalms" (book.name).
+  const refName = (book) => (book.abbr === 'Ps' ? 'Psalm' : book.name);
   const label = (id, short = false) => {
     const { book, chapter, verse } = locate(id);
-    return `${short ? shortName(book) : book.name} ${chapter}:${verse}`;
+    return `${short ? shortName(book) : refName(book)} ${chapter}:${verse}`;
   };
 
   // Every chapter in canonical order; overview.json's chapter numbers index into this.
@@ -73,8 +75,8 @@ export function getIndex(books) {
     locate,
     label,
     shortName,
-    // "Genesis 1" (or "1 Sam 3" when short) for a chapter from `chapters`.
-    chapterLabel: (ch, short = false) => `${short ? shortName(ch.book) : ch.book.name} ${ch.chapter}`,
+    // "Genesis 1", "Psalm 119" (or "1 Sam 3" when short) for a chapter from `chapters`.
+    chapterLabel: (ch, short = false) => `${short ? shortName(ch.book) : refName(ch.book)} ${ch.chapter}`,
     idOf: (book, chapter, verse) => chapterStarts[book.index][chapter - 1] + verse - 1,
     osis: (id) => {
       const { book, chapter, verse } = locate(id);
@@ -92,11 +94,15 @@ export function getIndex(books) {
       return chapterStarts[book.index][chapter - 1] + verse - 1;
     },
     // "John 1:1–3", "John 1:51–2:1", or "Lev 27:34–Num 1:1" for ranges that cross books.
+    // A range over more than one psalm reads "Psalms 23:6–24:1".
     rangeLabel(start, end, short = false) {
       if (start === end) return label(start, short);
       const a = locate(start), b = locate(end);
       if (a.book !== b.book) return `${label(start, short)}–${label(end, short)}`;
-      if (a.chapter !== b.chapter) return `${label(start, short)}–${b.chapter}:${b.verse}`;
+      if (a.chapter !== b.chapter) {
+        const name = short ? shortName(a.book) : a.book.name;
+        return `${name} ${a.chapter}:${a.verse}–${b.chapter}:${b.verse}`;
+      }
       return `${label(start, short)}–${b.verse}`;
     },
     // Books whose name or abbreviation starts with what the user typed, in canonical order.

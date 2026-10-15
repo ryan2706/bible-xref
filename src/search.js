@@ -13,9 +13,9 @@ export function initSearch(form) {
   let options = [];
   let active = -1;
 
-  // The header is tight between the phone and wide layouts (see the matching media
-  // query in style.css), so the example is dropped from the placeholder there.
-  const compact = window.matchMedia('(min-width: 721px) and (max-width: 1099.98px)');
+  // Below 1100px the search box is too narrow for the example (see the header media
+  // queries in style.css), so the placeholder drops it.
+  const compact = window.matchMedia('(max-width: 1099.98px)');
   const fullPlaceholder = input.placeholder;
   const setPlaceholder = () => (input.placeholder = compact.matches ? 'Go to a verse' : fullPlaceholder);
   compact.addEventListener('change', setPlaceholder);

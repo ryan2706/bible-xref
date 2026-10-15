@@ -33,11 +33,17 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   `label(id, short)`, `rangeLabel(start, end, short)`, `osis(id)`, `idOf(book, ch, v)`,
   `parseOsis("John.3.16")`, `testament(id)`, `shortName(book)`, book autocomplete, and
   `chapters` (every chapter in canonical order, indexed like overview.json) with `chapterLabel(ch)`. `parseTypedRef(text, index)`
-  parses what people type ("jn 3 16", "1 John 4:8"). Never format or parse references by hand.
+  parses what people type ("jn 3 16", "1 John 4:8", "psalm 23 1"). Never format or parse references by hand:
+  a single psalm is "Psalm 23:1" / "Psalm 119" in `label`, `rangeLabel` and `chapterLabel`, while `book.name`
+  ("Psalms") is for the book as a whole (book labels, menus, the chord diagram).
 - `src/preview.js`: `attachPreview(el, index, id, title)` adds the verse-text popover on
   hover/focus (one shared, dismissable popover). Works on HTML and SVG elements.
   `showPreview(anchor, title, note)` / `hidePreview()` drive the same popover by hand (e.g. for canvas);
-  `note` is a string or an element (e.g. a list).
+  `note` is a string or an element (e.g. a list). `attachNote(button, title, note)` opens a fixed note on hover,
+  focus or tap.
+- `src/votes.js`: votes explained one way everywhere. `VOTES_HELP` (the wording), `votesText(n)` ("986 votes"),
+  `votesEl(n)` (the same as a span, unit quieter) and `votesHelp()` (the "?" button; put one by the first use of
+  votes on each view).
 - `src/theme.js`: light/dark toggle, `isDark()`, and a `themechange` window event. The button's label names
   the theme it switches to ("Switch to light"); CSS picks the visible half so it is right from first paint, and a
   click announces "Dark theme on" through the header's `.theme-status` live region. Between 721 and 1099px the header
@@ -52,9 +58,13 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   entry in the `views` map in `main.js`; the nav link's `data-view` must match.
 - `src/search.js`: header search combobox (reference lookup only; free-text search will
   lazy-load `search.json`).
-- `src/views/`: `verse.js` (reading + margin columns), `verse-graph.js` (D3 force graph with
+- `src/views/`: `verse.js` (reading + margin columns; a first-visit welcome band, dismissal kept in
+  localStorage `welcome-dismissed`; previous/next verse buttons, also ← and → keys; a link to the chapter on
+  the arc diagram), `verse-graph.js` (D3 force graph with
   label-aware box collision), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
-  canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`),
+  canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`, and `&ch=Isa.53`
+  starts with that chapter highlighted and keeps the pinned chapter in the URL; on phones that chapter is described
+  in an inline line under the controls instead of the popover),
   `books.js` (chord diagram: ribbons on the same three stacked canvases with `isPointInPath` hit testing,
   book arcs and labels in an SVG overlay; labels never leave their section's span, and crowded runs
   collapse into one group label like "Minor Prophets"; details panel that becomes a bottom sheet below 720px;
@@ -158,7 +168,9 @@ Type:
 
 - **IM Fell English**: only the site title and the drop cap on the selected verse.
 - **Newsreader**: verse text and headings.
-- **Atkinson Hyperlegible Next**: interface, controls and chart labels.
+- **Atkinson Hyperlegible Next**: interface, controls and chart labels. Its zero is slashed, so every digit
+  comes from `Newsreader Figures`, a self-hosted digits-only subset (`src/fonts/`, first in `--font-ui`).
+  Verse references (`.ref-link`, popover titles, verse steps) are set in Newsreader.
 
 Layout: the verse view is a reading column (~36rem) with a margin column of
 references beside it, like a printed reference Bible. Below ~720px the margin column

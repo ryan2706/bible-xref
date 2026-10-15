@@ -9,6 +9,7 @@ import { loadBooks, loadOverview } from '../data.js';
 import { getIndex } from '../refs.js';
 import { themeColor, isDark } from '../theme.js';
 import { showPreview, hidePreview } from '../preview.js';
+import { votesHelp } from '../votes.js';
 
 const DEFAULT_VOTES = 50;
 const MAX_VOTES = 500;
@@ -34,7 +35,8 @@ const GROUP_NAMES = {
   'General Epistles': ['General letters', 'General'],
 };
 
-// Filters live in the hash so views can be shared: #/arcs?min=30&book=Isa
+// Filters and the selected chapter live in the hash so views can be shared:
+// #/arcs?min=30&book=Isa&ch=Isa.53
 function readQuery(query, index, minVotes) {
   const params = new URLSearchParams(query);
   const min = Number(params.get('min'));
@@ -42,13 +44,24 @@ function readQuery(query, index, minVotes) {
   return {
     min: Number.isFinite(min) && min > 0 ? Math.min(MAX_VOTES, Math.max(minVotes, Math.round(min / VOTES_STEP) * VOTES_STEP)) : DEFAULT_VOTES,
     book: index.books.find((b) => b.abbr.toLowerCase() === abbr) ?? null,
+    ch: readChapter(params.get('ch'), index),
   };
 }
 
-function writeQuery(min, book) {
+// "Isa.53" -> chapter index into index.chapters, or -1 if it isn't a real chapter.
+function readChapter(value, index) {
+  const m = /^(.+)\.(\d+)$/.exec(value ?? '');
+  if (!m) return -1;
+  const book = index.books.find((b) => b.abbr.toLowerCase() === m[1].toLowerCase());
+  const chapter = Number(m[2]);
+  return book && chapter >= 1 && chapter <= book.chapters ? book.firstChapter + chapter - 1 : -1;
+}
+
+function writeQuery(min, book, chapter) {
   const params = new URLSearchParams();
   if (min !== DEFAULT_VOTES) params.set('min', String(min));
   if (book) params.set('book', book.abbr);
+  if (chapter) params.set('ch', `${chapter.book.abbr}.${chapter.chapter}`);
   const query = params.toString();
   // replaceState doesn't fire hashchange, so the view isn't rebuilt.
   history.replaceState(null, '', query ? `#/arcs?${query}` : '#/arcs');
@@ -114,7 +127,12 @@ function buildChart(figure, index, overview, initial) {
   const controls = h(
     'div',
     { class: 'arcs-controls' },
-    h('div', { class: 'arcs-control' }, h('label', { for: 'arcs-votes' }, 'Minimum votes'), h('div', { class: 'arcs-slider' }, slider, votesOut)),
+    h(
+      'div',
+      { class: 'arcs-control' },
+      h('div', { class: 'arcs-control-head' }, h('label', { for: 'arcs-votes' }, 'Minimum votes'), votesHelp()),
+      h('div', { class: 'arcs-slider' }, slider, votesOut),
+    ),
     h('div', { class: 'arcs-control' }, h('label', { for: 'arcs-book' }, 'Book'), bookSelect),
     count,
   );
@@ -146,7 +164,11 @@ function buildChart(figure, index, overview, initial) {
     h('li', {}, h('span', { class: 'swatch current' }), 'Selected chapter'),
   );
   const hint = h('p', { class: 'arcs-hint' });
-  figure.replaceChildren(controls, scroller, live, legend, hint);
+  // On phones a chapter opened from a link is described here, under the controls,
+  // rather than in a popover that would cover them.
+  const chapterLine = h('p', { class: 'arcs-chapter' });
+  chapterLine.hidden = true;
+  figure.replaceChildren(controls, chapterLine, scroller, live, legend, hint);
 
   // --- State ---------------------------------------------------------------------
   let minVotes = initial.min;
@@ -155,7 +177,10 @@ function buildChart(figure, index, overview, initial) {
   let byChapter = []; // chapter -> visible links touching it
   let L = null; // layout
   let hovered = -1;
-  let pinned = false; // selected by tap or keyboard rather than mouse hover
+  let pinned = false; // selected by tap, keyboard or the URL rather than mouse hover
+  let sharedCh = -1; // the pinned chapter as written to the URL
+  let ignoreScroll = false; // the next scroll event is ours (centring a chapter), not the user's
+  let inline = false; // the selected chapter is described in chapterLine, not the popover
   let lastPointer = 'mouse';
 
   function passes() {
@@ -510,10 +535,21 @@ function buildChart(figure, index, overview, initial) {
     return Math.min(N - 1, Math.max(0, Math.floor((shifted - PAD_X) / L.step)));
   }
 
-  function select(c, { pin = false, announce = false } = {}) {
+  // A pinned chapter is kept in the URL (&ch=Isa.53); hover isn't.
+  function select(c, options = {}) {
+    selectChapter(c, options);
+    const ch = pinned && hovered >= 0 ? hovered : -1;
+    if (ch === sharedCh) return;
+    sharedCh = ch;
+    writeQuery(minVotes, book, chapters[ch]);
+  }
+
+  function selectChapter(c, { pin = false, announce = false, inline: inlineNote = false } = {}) {
     pinned = pin;
     if (c === hovered) return;
     hovered = c;
+    inline = c >= 0 && inlineNote;
+    chapterLine.hidden = !inline;
     drawHighlight();
     if (c < 0) {
       hidePreview();
@@ -522,14 +558,26 @@ function buildChart(figure, index, overview, initial) {
     const ch = chapters[c];
     const n = byChapter[c].length;
     const links = n === 0 ? 'No links' : `${n.toLocaleString('en')} ${n === 1 ? 'link' : 'links'}`;
-    const touch = lastPointer === 'touch' && pin;
-    const action = touch ? 'Tap again to read it.' : announce ? 'Press Enter to read it.' : 'Click to read it.';
+    // How to open it depends on how the chapter was chosen: a tap, the keyboard, or a
+    // mouse (or a link, which counts as the device's usual pointer).
+    const touch = pin && (lastPointer === 'touch' || (document.activeElement !== scroller && matchMedia('(hover: none)').matches));
+    const keyboard = document.activeElement === scroller;
+    const action = touch ? 'Tap again to read it.' : keyboard ? 'Press Enter to read it.' : 'Click to read it.';
     const note = `${links} at ${minVotes}+ votes${book ? ` touching ${book.name}` : ''}. ${action}`;
     // The popover anchors to a full-height marker, so it opens above or below the
     // chart rather than over the highlighted arcs.
     marker.style.left = `${L.x(c)}px`;
     marker.style.height = `${L.H}px`;
-    showPreview(marker, index.chapterLabel(ch), note);
+    if (inline) {
+      hidePreview();
+      chapterLine.replaceChildren(
+        h('strong', {}, index.chapterLabel(ch)),
+        `: ${links.toLowerCase()} at ${minVotes}+ votes${book ? ` touching ${book.name}` : ''}. `,
+        h('a', { href: `#/verse/${index.osis(ch.firstId)}` }, `Read ${index.chapterLabel(ch)}`),
+      );
+    } else {
+      showPreview(marker, index.chapterLabel(ch), note);
+    }
     if (announce) live.textContent = `${index.chapterLabel(ch)}: ${links.toLowerCase()}.`;
   }
 
@@ -558,12 +606,14 @@ function buildChart(figure, index, overview, initial) {
   // Tapping outside the chart clears a tapped selection.
   const onDocPointer = (e) => {
     if (!stack.isConnected) return document.removeEventListener('pointerdown', onDocPointer);
-    if (pinned && !stack.contains(e.target) && !e.target.closest?.('.preview')) select(-1);
+    if (pinned && !stack.contains(e.target) && !e.target.closest?.('.preview, .arcs-chapter')) select(-1);
   };
   document.addEventListener('pointerdown', onDocPointer);
   // The popover is positioned for the current scroll, so drop it when the chart scrolls.
   scroller.addEventListener('scroll', () => {
-    if (hovered >= 0 && document.activeElement !== scroller) select(-1);
+    if (ignoreScroll) return void (ignoreScroll = false);
+    // (The inline description doesn't depend on scroll position, so it stays.)
+    if (hovered >= 0 && !inline && document.activeElement !== scroller) select(-1);
   });
 
   // Keyboard: arrows move by chapter, Page Up/Down by book, Enter reads.
@@ -625,11 +675,12 @@ function buildChart(figure, index, overview, initial) {
       return;
     }
     const keep = pinned ? hovered : -1;
+    const keepInline = inline;
     select(-1);
     filter();
     drawAll({ dim: final });
     drawnKey = filterKey();
-    if (keep >= 0) select(keep, { pin: true });
+    if (keep >= 0) select(keep, { pin: true, inline: keepInline });
   }
 
   slider.addEventListener('input', () => {
@@ -645,12 +696,12 @@ function buildChart(figure, index, overview, initial) {
   slider.addEventListener('change', () => {
     minVotes = Number(slider.value);
     redraw({ final: true });
-    writeQuery(minVotes, book);
+    writeQuery(minVotes, book, chapters[sharedCh]);
   });
   bookSelect.addEventListener('change', () => {
     book = bookSelect.value === '' ? null : index.books[Number(bookSelect.value)];
     redraw({ final: true });
-    writeQuery(minVotes, book);
+    writeQuery(minVotes, book, chapters[sharedCh]);
   });
 
   const onTheme = () => {
@@ -687,4 +738,16 @@ function buildChart(figure, index, overview, initial) {
   drawnKey = filterKey();
   updateHint();
   observer.observe(scroller);
+
+  // A chapter in the URL (e.g. from a verse's "See this chapter on the arc diagram")
+  // starts highlighted, centred if the chart scrolls.
+  if (initial.ch >= 0) {
+    const target = Math.max(0, Math.round(L.x(initial.ch) - scroller.clientWidth / 2));
+    if (scroller.scrollWidth > scroller.clientWidth && target !== scroller.scrollLeft) {
+      ignoreScroll = true;
+      scroller.scrollLeft = target;
+    }
+    // Phones (the scrolling layout) describe it inline; wider screens use the popover.
+    select(initial.ch, { pin: true, announce: true, inline: L.narrow });
+  }
 }

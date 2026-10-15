@@ -12,6 +12,7 @@ import { loadBooks, loadBookMatrix, loadXrefs, getVerseText } from '../data.js';
 import { getIndex } from '../refs.js';
 import { themeColor, SECTIONS, sectionOf } from '../theme.js';
 import { showPreview, hidePreview } from '../preview.js';
+import { votesText, votesEl, votesHelp } from '../votes.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const TAU = 2 * Math.PI;
@@ -54,7 +55,6 @@ const angleGap = (a, b) => {
   const d = Math.abs(a - b) % TAU;
   return Math.min(d, TAU - d);
 };
-const votesText = (n) => `${n.toLocaleString('en')} ${n === 1 ? 'vote' : 'votes'}`;
 const same = (x, y) => x === y || (!!x && !!y && x.type === y.type && x.a === y.a && x.b === y.b);
 
 function trim(text) {
@@ -100,7 +100,8 @@ export async function renderBooks(container, [query = '']) {
     h(
       'p',
       { class: 'view-intro' },
-      'Each book of the Bible is an arc around the circle, sized by its cross-references, and each ribbon joins two books that cite each other. Wider ribbons have more votes.',
+      'Each book of the Bible is an arc around the circle, sized by its cross-references, and each ribbon joins two books that cite each other. Wider ribbons have more votes. ',
+      votesHelp(),
     ),
     figure,
   );
@@ -614,7 +615,7 @@ function buildChart(figure, index, matrix, initial) {
         h(
           'ol',
           { class: 'preview-list' },
-          top.map(([j, v]) => h('li', {}, h('span', {}, name(j)), h('span', { class: 'votes' }, v.toLocaleString('en')))),
+          top.map(([j, v]) => h('li', {}, h('span', {}, name(j)), votesEl(v))),
         ),
         action,
       );
@@ -722,7 +723,7 @@ function buildChart(figure, index, matrix, initial) {
               'button',
               { type: 'button', class: 'books-partner' },
               h('span', { class: 'books-partner-name' }, name(j)),
-              h('span', { class: 'votes' }, v.toLocaleString('en'), h('span', { class: 'visually-hidden' }, ' votes')),
+              votesEl(v),
               h('span', { class: 'books-bar', style: `--c: var(${SECTIONS[secOf[j]].token}); --w: ${(v / max) * 100}%`, 'aria-hidden': 'true' }),
             );
             b.addEventListener('click', () => setPin({ type: 'pair', a: Math.min(i, j), b: Math.max(i, j) }, { focusPanel: true }));
@@ -790,7 +791,7 @@ function buildChart(figure, index, matrix, initial) {
         'div',
         { class: 'books-pair-refs' },
         h('span', {}, ref(from, from), h('span', { 'aria-hidden': 'true' }, ' → '), h('span', { class: 'visually-hidden' }, ' cites '), ref(toStart, toEnd)),
-        h('span', { class: 'votes' }, votesText(votes)),
+        votesEl(votes),
       ),
       h('p', { class: 'books-pair-text' }, trim(fromText)),
       h('p', { class: 'books-pair-text' }, toShown + (toEnd > toStart && !toShown.endsWith('…') ? ' …' : '')),
