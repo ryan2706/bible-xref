@@ -11,10 +11,11 @@ across the whole Bible.
 1. **Verse explorer**: search plus a force-directed network graph of a verse's cross-references.
 2. **Arc diagram**: every chapter of the Bible, with cross-references drawn as arcs on `<canvas>`.
 3. **Chord diagram**: book-to-book cross-reference flows.
+4. **About**: what the site shows, data sources and how to read the diagrams.
 
 ## Commands
 
-- `npm run dev`: regenerate data, then start the Vite dev server (http://localhost:5173/)
+- `npm run dev`: regenerate data, then start the Vite dev server (http://localhost:5173/bible-xref/)
 - `npm run build`: regenerate data, then production build into `dist/`
 - `npm run preview`: serve the production build locally
 - `npm run build:data`: regenerate the static JSON in `public/data/` (prints a size table)
@@ -58,6 +59,58 @@ Cleanup rules in the build script:
 - 19 verses had KJV margin notes leaked onto the end (e.g. `…: Heb. Jehovah-tsidkenu`). They are stripped via an
   exact-match list (`MARGIN_NOTES`); the build fails if an entry stops matching.
 - Stray spaces before punctuation (`LORD .`) are removed; curly apostrophes and æ/Æ stay in display text.
+
+## Design
+
+Reverent and scholarly but modern: illuminated manuscript meets data journalism.
+Tokens live in `src/style.css` as CSS custom properties; canvas code should read
+colours from them (and redraw on the `themechange` window event), never hard-code hexes.
+
+Type:
+
+- **IM Fell English**: only the site title and the drop cap on the selected verse.
+- **Newsreader**: verse text and headings.
+- **Atkinson Hyperlegible Next**: interface, controls and chart labels.
+
+Layout: the verse view is a reading column (~36rem) with a margin column of
+references beside it, like a printed reference Bible. Below ~720px the margin column
+moves under the verse text. Content is left-aligned to the header.
+
+Palette (all chart colours pass the dataviz validator: lightness band, chroma, CVD
+separation, normal-vision floor, ≥3:1 against the background):
+
+| Token | Role | Light | Dark |
+|---|---|---|---|
+| `--paper` | background | `#F2F5F1` | `#0F1730` (night lapis) |
+| `--ink` | text | `#20251F` | `#E8E3D3` |
+| `--ink-muted` | secondary text | `#545B53` | `#AFAA9A` |
+| `--rule` | dividers (decorative) | `#D5DBD3` | `#2A3350` |
+| `--arc-ot` | OT→OT arcs, lapis | `#2C4FA3` | `#6F8DE6` |
+| `--arc-nt` | NT→NT arcs, gold | `#A97A1E` | `#B08629` |
+| `--select` | selection in arc and verse views only, vermilion | `#C23B22` | `#F0775A` |
+| `--dim` | de-emphasised marks during selection | `#C9CEC7` | `#3A4258` |
+| `--sec-law` | Law, madder | `#B1344A` | `#CF4F7E` |
+| `--sec-history` | History (OT), ochre | `#A67708` | `#B0821E` |
+| `--sec-poetry` | Poetry, verdigris | `#078C74` | `#1E9C86` |
+| `--sec-prophets` | Major + Minor Prophets, vermilion | `#D2552B` | `#D86A3E` |
+| `--sec-gospels` | Gospels + Acts, ultramarine | `#2F55C8` | `#6F8BE8` |
+| `--sec-pauline` | Pauline letters, malachite | `#4B8F2E` | `#5E9E44` |
+| `--sec-general` | General letters, Tyrian purple | `#7A3E9D` | `#A06FC8` |
+| `--sec-revelation` | Revelation, orpiment | `#A07F0F` | `#A88C1C` |
+
+Chart rules:
+
+- **Arc diagram**: lapis for OT→OT, gold for NT→NT, a lapis→gold gradient for OT↔NT.
+  Thin low-opacity strokes; `globalCompositeOperation` is `lighter` (additive) in dark
+  mode and `multiply` in light mode so dense areas build up in both. Votes slider defaults to ~50.
+- **Vermilion means selection** in the arc and verse views, and nothing else. When something
+  is selected there, every other mark switches to `--dim`.
+- **The chord diagram never uses vermilion**, because the Prophets pigment is also a vermilion.
+  Selected ribbons keep their section pigment and everything else switches to `--dim`.
+- **Chord diagram**: the 8 section pigments, in the fixed order above (never cycled or
+  re-ordered by a filter), always with direct section labels. Non-adjacent pairs
+  (e.g. ochre and orpiment) look alike, so colour is never the only cue.
+- Chart text uses ink tokens, never the series colour.
 
 ## Data credits
 

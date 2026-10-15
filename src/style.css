@@ -1,21 +1,311 @@
+/* ---------------------------------------------------------------------------
+   Tokens. Light paper is the default; dark is night lapis. Chart colours were
+   checked for contrast and colour-blind separation (see CLAUDE.md, Design).
+   --------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --paper: #f2f5f1;
+  --ink: #20251f;
+  --ink-muted: #545b53;
+  --rule: #d5dbd3;
+
+  /* Arc diagram: OT links, NT links, selection, de-emphasised marks */
+  --arc-ot: #2c4fa3;
+  --arc-nt: #a97a1e;
+  --select: #c23b22;
+  --dim: #c9cec7;
+
+  /* Chord diagram: section pigments, in canonical order */
+  --sec-law: #b1344a;
+  --sec-history: #a67708;
+  --sec-poetry: #078c74;
+  --sec-prophets: #d2552b;
+  --sec-gospels: #2f55c8;
+  --sec-pauline: #4b8f2e;
+  --sec-general: #7a3e9d;
+  --sec-revelation: #a07f0f;
+
+  --link: var(--arc-ot);
+
+  --font-title: 'IM Fell English', 'Iowan Old Style', Georgia, serif;
+  --font-text: 'Newsreader', 'Iowan Old Style', Georgia, serif;
+  --font-ui: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', system-ui, sans-serif;
+
+  /* Classical type scale: 14 / 16 / 18 / 21 / 24 / 36 / 48 */
+  --step--1: 0.875rem;
+  --step-0: 1rem;
+  --step-1: 1.125rem;
+  --step-2: 1.3125rem;
+  --step-3: 1.5rem;
+  --step-4: 2.25rem;
+  --step-5: 3rem;
+
+  --gutter: clamp(1rem, 4vw, 2.5rem);
+  --measure: 36rem;
+  --margin-col: 15rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --paper: #0f1730;
+    --ink: #e8e3d3;
+    --ink-muted: #afaa9a;
+    --rule: #2a3350;
+    --arc-ot: #6f8de6;
+    --arc-nt: #b08629;
+    --select: #f0775a;
+    --dim: #3a4258;
+    --sec-law: #cf4f7e;
+    --sec-history: #b0821e;
+    --sec-poetry: #1e9c86;
+    --sec-prophets: #d86a3e;
+    --sec-gospels: #6f8be8;
+    --sec-pauline: #5e9e44;
+    --sec-general: #a06fc8;
+    --sec-revelation: #a88c1c;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #0f1730;
+  --ink: #e8e3d3;
+  --ink-muted: #afaa9a;
+  --rule: #2a3350;
+  --arc-ot: #6f8de6;
+  --arc-nt: #b08629;
+  --select: #f0775a;
+  --dim: #3a4258;
+  --sec-law: #cf4f7e;
+  --sec-history: #b0821e;
+  --sec-poetry: #1e9c86;
+  --sec-prophets: #d86a3e;
+  --sec-gospels: #6f8be8;
+  --sec-pauline: #5e9e44;
+  --sec-general: #a06fc8;
+  --sec-revelation: #a88c1c;
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+   --------------------------------------------------------------------------- */
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
 
-html,
-body {
-  margin: 0;
-  height: 100%;
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  line-height: 1.5;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 0.15em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+main:focus {
+  outline: none;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--gutter);
+  top: -3rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--ink);
+  color: var(--paper);
+  z-index: 10;
+}
+
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Shell
+   --------------------------------------------------------------------------- */
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 2rem;
+  padding: 1.25rem var(--gutter) 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.site-title {
+  font-family: var(--font-title);
+  font-size: var(--step-3);
+  line-height: 1.2;
+  color: var(--ink);
+  text-decoration: none;
+  margin-right: auto;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+}
+
+.site-nav a {
+  color: var(--ink-muted);
+  text-decoration: none;
+  padding-block: 0.25rem;
+  border-bottom: 2px solid transparent;
+}
+
+.site-nav a:hover {
+  color: var(--ink);
+}
+
+.site-nav a[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: currentColor;
+}
+
+.theme-toggle {
+  font: inherit;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  cursor: pointer;
+}
+
+.theme-toggle:hover,
+.theme-toggle[aria-pressed='true'] {
+  color: var(--ink);
+  border-color: var(--ink-muted);
 }
 
 main {
   flex: 1;
+  width: 100%;
+  max-width: 72rem;
+  padding: 2rem var(--gutter) 3rem;
+}
+
+.site-footer {
+  padding: 1.25rem var(--gutter);
+  border-top: 1px solid var(--rule);
+  color: var(--ink-muted);
+  font-size: var(--step--1);
+}
+
+.site-footer p {
+  margin: 0;
+  max-width: 60rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Views
+   --------------------------------------------------------------------------- */
+.view-title {
+  font-family: var(--font-text);
+  font-weight: 500;
+  font-size: var(--step-4);
+  line-height: 1.15;
+  margin: 0 0 1.25rem;
+}
+
+.view-intro {
+  color: var(--ink-muted);
+  max-width: var(--measure);
+  margin: 0 0 2rem;
+}
+
+.status {
+  color: var(--ink-muted);
+}
+
+/* Verse view: reading column with a margin column of references beside it,
+   like a printed reference Bible. Below ~720px the margin moves underneath. */
+.verse-layout {
+  display: grid;
+  grid-template-columns: minmax(0, var(--measure)) var(--margin-col);
+  gap: 1.5rem 3rem;
+  align-items: start;
+}
+
+.reading-column {
+  min-width: 0;
+}
+
+.margin-column {
+  border-left: 1px solid var(--rule);
+  padding-left: 1.25rem;
+  font-size: var(--step--1);
+}
+
+.margin-column h2 {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .verse-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .margin-column {
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+    padding-left: 0;
+    padding-top: 1rem;
+  }
+}
+
+.verse-text {
+  font-family: var(--font-text);
+  font-size: var(--step-2);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Rubricated drop cap on the selected verse. Vermilion marks selection. */
+.verse-text.is-selected::first-letter {
+  font-family: var(--font-title);
+  float: left;
+  font-size: 3.6em;
+  line-height: 0.8;
+  margin: 0.06em 0.08em 0 0;
+  color: var(--select);
+}
+
+.placeholder {
+  min-height: 20rem;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--rule);
+  border-radius: 4px;
+  color: var(--ink-muted);
+  padding: 1rem;
+  text-align: center;
 }

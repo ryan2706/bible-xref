@@ -2,14 +2,44 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Bible Cross-Reference Explorer</title>
+    <meta name="description" content="See how verses connect across the whole Bible through 340,000 cross-references." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;700&family=IM+Fell+English&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400&display=swap"
+    />
+    <script>
+      // Apply a saved theme before first paint to avoid a flash of the wrong theme.
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
   </head>
   <body>
-    <header></header>
-    <main id="app"></main>
-    <footer></footer>
+    <a class="skip-link" href="#app">Skip to content</a>
+    <header class="site-header">
+      <a class="site-title" href="#/">Bible Cross-Reference Explorer</a>
+      <nav class="site-nav" aria-label="Views">
+        <a href="#/verse/John.3.16" data-view="verse">Verse</a>
+        <a href="#/arcs" data-view="arcs">Arcs</a>
+        <a href="#/books" data-view="books">Books</a>
+        <a href="#/about" data-view="about">About</a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+    </header>
+    <main id="app" tabindex="-1"></main>
+    <footer class="site-footer">
+      <p>
+        Cross-references from <a href="https://www.openbible.info/labs/cross-references/">OpenBible.info</a>,
+        licensed <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+        Bible text: King James Version (public domain).
+      </p>
+    </footer>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
