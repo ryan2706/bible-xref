@@ -210,3 +210,6 @@ Chart rules:
 - Make small changes, one task at a time.
 - Run the dev server to check each change.
 - After each task, tell the user exactly what to look at in the browser (URL/route and what they should see).
+- This is a solo project: when I say commit and push, push to main directly.
+- Pushing to main deploys the site: `.github/workflows/deploy.yml` builds it (which regenerates `public/data/`
+  from `data-raw/`) and publishes `dist/` to GitHub Pages.
