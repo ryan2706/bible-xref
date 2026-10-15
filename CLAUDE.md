@@ -51,7 +51,8 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   `books.js` (chord diagram: ribbons on the same three stacked canvases with `isPointInPath` hit testing,
   book arcs and labels in an SVG overlay; labels never leave their section's span, and crowded runs
   collapse into one group label like "Minor Prophets"; details panel that becomes a bottom sheet below 720px;
-  state in `#/books?pair=Isa-Matt`, `?book=Isa`, `&self=1`), `placeholders.js` (About, not found).
+  state in `#/books?pair=Isa-Matt`, `?book=Isa`, `&self=1`), `about.js` (About: what the site is, a
+  how-to-read section with a link for each view, and credits), `placeholders.js` (not found).
 - Label checks: in dev, `books.js` and `arcs.js` verify after every layout that each label sits inside its
   own section, log a console error if not, and put the result on `window.__labelCheck` for Playwright.
   `tests/books-labels.js` checks the rendered Books labels at 4 widths, both themes, self-links on/off.

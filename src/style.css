@@ -306,17 +306,6 @@ main {
   color: var(--select);
 }
 
-.placeholder {
-  min-height: 20rem;
-  display: grid;
-  place-items: center;
-  border: 1px dashed var(--rule);
-  border-radius: 4px;
-  color: var(--ink-muted);
-  padding: 1rem;
-  text-align: center;
-}
-
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -1062,4 +1051,56 @@ main {
 
 .chord-group-label {
   font-style: italic;
+}
+
+/* ---------------------------------------------------------------------------
+   About: a single reading column of Newsreader prose, sections divided by rules.
+   --------------------------------------------------------------------------- */
+.about {
+  max-width: var(--measure);
+}
+
+.about-section {
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.about-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.about h2 {
+  font-family: var(--font-text);
+  font-weight: 500;
+  font-size: var(--step-3);
+  line-height: 1.25;
+  margin: 0 0 0.75rem;
+}
+
+.about p {
+  font-family: var(--font-text);
+  font-size: var(--step-1);
+  line-height: 1.6;
+  margin: 0 0 1rem;
+}
+
+.about-section > p:last-child {
+  margin-bottom: 0;
+}
+
+.about .about-open {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+}
+
+.about-open a::after {
+  display: inline-block; /* keeps the arrow out of the underline */
+  margin-left: 0.3em;
+  content: '→';
+  content: '→' / ''; /* decorative: not read aloud */
+}
+
+.about-credits p {
+  font-size: var(--step-0);
 }

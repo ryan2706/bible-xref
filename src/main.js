@@ -5,7 +5,8 @@ import { initSearch } from './search.js';
 import { renderVerse } from './views/verse.js';
 import { renderArcs } from './views/arcs.js';
 import { renderBooks } from './views/books.js';
-import { renderAbout, renderNotFound } from './views/placeholders.js';
+import { renderAbout } from './views/about.js';
+import { renderNotFound } from './views/placeholders.js';
 
 const app = document.getElementById('app');
 const navLinks = document.querySelectorAll('.site-nav a');
