@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:data": "node scripts/build-data.mjs",
+    "prebuild": "npm run build:data",
+    "predev": "npm run build:data"
   },
   "devDependencies": {
     "vite": "^8.3.0"
