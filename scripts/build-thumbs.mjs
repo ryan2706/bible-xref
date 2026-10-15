@@ -4,9 +4,10 @@
 // they follow light and dark like the rest of the page.
 import fs from 'node:fs';
 import path from 'node:path';
-import { chord as d3chord, ribbon as d3ribbon, arc as d3arc, forceSimulation, forceLink, forceManyBody, forceCenter } from 'd3';
+import { chord as d3chord, ribbon as d3ribbon, arc as d3arc } from 'd3';
 import { sectionOf } from '../src/sections.js';
 import { strongestLinks } from '../src/links.js';
+import { radialLayout, SPAN, SPLIT } from '../src/graph-layout.js';
 
 export const ARCS_MIN_VOTES = 50; // the arc diagram's default
 
@@ -84,42 +85,37 @@ function booksSvg({ books, matrix }) {
   return { svg: SVG(`${-R} ${-R} ${2 * R} ${2 * R}`, 'thumb-books', round(body)), marks: kept.length, of: chords.length };
 }
 
-// Verse explorer: John 3:16 and the same strongest links as its connections graph,
-// laid out once with a force simulation and scaled to fit.
-function graphSvg({ centerId, out, incoming, isNT }) {
-  const W = 400, H = 300, R = 9, R_CENTER = 14, PAD = R_CENTER + 2;
+// Verse explorer: John 3:16 and the same strongest links as its connections graph, with
+// the same radial layout (canonical order round an ellipse), scaled to fit. No labels.
+function graphSvg({ centerId, out, incoming, isNT, books }) {
+  const W = 400, H = 300, R = 9, R_CENTER = 14;
   const links = strongestLinks(out, incoming);
-  const nodes = new Map([[centerId, { id: centerId, center: true }]]);
-  const edges = [];
-  for (const l of links) {
-    if (!nodes.has(l.other)) nodes.set(l.other, { id: l.other });
-    edges.push({ source: centerId, target: l.other, votes: l.votes });
-  }
-  const list = [...nodes.values()];
-  const maxVotes = Math.max(1, ...edges.map((e) => e.votes));
-  forceSimulation(list)
-    .force('link', forceLink(edges).id((d) => d.id).distance((e) => 110 - 45 * (e.votes / maxVotes)).strength(0.6))
-    .force('charge', forceManyBody().strength(-260))
-    .force('center', forceCenter(0, 0))
-    .stop()
-    .tick(300);
-  const xs = list.map((n) => n.x), ys = list.map((n) => n.y);
-  const x0 = Math.min(...xs), y0 = Math.min(...ys);
-  const k = Math.min((W - 2 * PAD) / (Math.max(...xs) - x0 || 1), (H - 2 * PAD) / (Math.max(...ys) - y0 || 1));
-  const ox = (W - k * (Math.max(...xs) - x0)) / 2, oy = (H - k * (Math.max(...ys) - y0)) / 2;
-  const px = (n) => (ox + (n.x - x0) * k).toFixed(1), py = (n) => (oy + (n.y - y0) * k).toFixed(1);
+  const ids = [...new Set(links.map((l) => l.other))];
+  const L = radialLayout(
+    ids.map((id) => ({ id, labelWidth: 0 })),
+    { width: W, maxHeight: H, ntStart: books.find((b) => b.testament === 'NT').firstId, lastId: books.at(-1).lastId, r: R, rCenter: R_CENTER, labelHeight: 0, dotPad: 6, maxRadius: 400 },
+  );
+  // Scale the ellipse (plus node radius) to fill the thumbnail.
+  const k = Math.min((W / 2 - R - 4) / L.rx, (H / 2 - R - 4) / L.ry);
+  const px = (x) => (W / 2 + (x - L.cx) * k).toFixed(1), py = (y) => (H / 2 + (y - L.cy) * k).toFixed(1);
+  const at = new Map(ids.map((id, i) => [id, L.nodes[i]]));
+  const maxVotes = Math.max(1, ...links.map((l) => l.votes));
 
-  let body = '<g class="g-edge">';
-  for (const e of edges) {
-    const w = (1.5 + 4.5 * Math.sqrt(e.votes / maxVotes)).toFixed(1);
-    body += `<line x1="${px(e.source)}" y1="${py(e.source)}" x2="${px(e.target)}" y2="${py(e.target)}" stroke-width="${w}"/>`;
+  const arc = (a, b) => {
+    const pt = (t) => `${px(L.cx + L.rx * Math.sin(t))},${py(L.cy - L.ry * Math.cos(t))}`;
+    return `M${pt(a)} A${(L.rx * k).toFixed(1)},${(L.ry * k).toFixed(1)} 0 0 1 ${pt(b)}`;
+  };
+  let body = `<path class="g-guide-ot" d="${arc(-SPAN, -SPLIT)}"/><path class="g-guide-nt" d="${arc(SPLIT, SPAN)}"/>`;
+  body += '<g class="g-edge">';
+  for (const l of links) {
+    const p = at.get(l.other);
+    const w = (1.5 + 4.5 * Math.sqrt(l.votes / maxVotes)).toFixed(1);
+    body += `<line x1="${px(L.cx)}" y1="${py(L.cy)}" x2="${px(p.x)}" y2="${py(p.y)}" stroke-width="${w}"/>`;
   }
   body += '</g>';
-  for (const n of list) {
-    const cls = n.center ? 'g-sel' : isNT(n.id) ? 'g-nt' : 'g-ot';
-    body += `<circle class="${cls}" cx="${px(n)}" cy="${py(n)}" r="${n.center ? R_CENTER : R}"/>`;
-  }
-  return { svg: SVG(`0 0 ${W} ${H}`, 'thumb-graph', round(body)), marks: list.length };
+  for (const id of ids) body += `<circle class="${isNT(id) ? 'g-nt' : 'g-ot'}" cx="${px(at.get(id).x)}" cy="${py(at.get(id).y)}" r="${R}"/>`;
+  body += `<circle class="g-sel" cx="${px(L.cx)}" cy="${py(L.cy)}" r="${R_CENTER}"/>`;
+  return { svg: SVG(`0 0 ${W} ${H}`, 'thumb-graph', round(body)), marks: ids.length + 1 };
 }
 
 export function writeThumbs(dir, data) {

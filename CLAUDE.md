@@ -36,8 +36,9 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   parses what people type ("jn 3 16", "1 John 4:8", "psalm 23 1"). Never format or parse references by hand:
   a single psalm is "Psalm 23:1" / "Psalm 119" in `label`, `rangeLabel` and `chapterLabel`, while `book.name`
   ("Psalms") is for the book as a whole (book labels, menus, the chord diagram).
-- `src/preview.js`: `attachPreview(el, index, id, title)` adds the verse-text popover on
-  hover/focus (one shared, dismissable popover). Works on HTML and SVG elements.
+- `src/preview.js`: `attachPreview(el, index, id, title, { tapTwice })` adds the verse-text popover on
+  hover/focus (one shared, dismissable popover). Works on HTML and SVG elements. Pass `tapTwice: true` for links
+  inside charts (first tap previews, second opens); text links leave it off and open on a single tap.
   `showPreview(anchor, title, note)` / `hidePreview()` drive the same popover by hand (e.g. for canvas);
   `note` is a string or an element (e.g. a list). `attachNote(button, title, note)` opens a fixed note on hover,
   focus or tap.
@@ -51,17 +52,24 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   `search.js` shortens the placeholder.
   `themeColor('--arc-ot')` reads a colour token for canvas drawing. It re-exports `SECTIONS` and
   `sectionOf(book)` (the 8 chord-diagram sections, their order and colour tokens) from `src/sections.js`, which has
-  no DOM code so the data build can import it too. Likewise `src/links.js` (`strongestLinks`: the 15 links a verse's
-  graph draws) is shared by `verse-graph.js` and the thumbnail build.
+  no DOM code so the data build can import it too. Likewise `src/links.js` (`strongestLinks`: the 15 verses a verse's
+  graph draws, up to 8 it references and 7 that reference it by votes, unused places going to the other side; a
+  verse linked both ways takes one place and keeps both links) and `src/graph-layout.js` (`radialLayout`: places those verses round an ellipse in canonical order,
+  Genesis lower left, OT up the left, NT down the right, Revelation lower right, nudging crowded nodes apart in
+  order until no label overlaps; labels outside the ellipse, edges inside) are shared by `verse-graph.js` and the
+  thumbnail build.
 - `src/dom.js`: `h(tag, attrs, ...children)`. Children are set as text, never parsed as HTML.
 - `src/router.js` + `src/main.js`: hash routes (see the New view checklist below). A new view needs a route pattern here and an
   entry in the `views` map in `main.js`; the nav link's `data-view` must match.
 - `src/search.js`: header search combobox (reference lookup only; free-text search will
   lazy-load `search.json`).
-- `src/views/`: `verse.js` (reading + margin columns; a first-visit welcome band, dismissal kept in
+- `src/views/`: `verse.js` (reading + margin columns, and from 1100px a third, sticky column for the graph, sized
+  to fit the window; below 1100px the graph sits under the text; the legend lists only the kinds of mark the graph
+  draws; a first-visit welcome band, dismissal kept in
   localStorage `welcome-dismissed`; previous/next verse buttons, also ← and → keys; a link to the chapter on
-  the arc diagram), `verse-graph.js` (D3 force graph with
-  label-aware box collision), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
+  the arc diagram), `verse-graph.js` (radial SVG graph from `radialLayout`: edges thick by votes with
+  an arrowhead 70% of the way out, a node's edges darken on hover/focus, labels hidden until hover only if they
+  can't all fit), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
   canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`, and `&ch=Isa.53`
   starts with that chapter highlighted and keeps the pinned chapter in the URL; on phones that chapter is described
   in an inline line under the controls instead of the popover),
@@ -78,6 +86,9 @@ Shared modules. Reuse these in new views instead of re-implementing them.
 - Label checks: in dev, `books.js` and `arcs.js` verify after every layout that each label sits inside its
   own section, log a console error if not, and put the result on `window.__labelCheck` for Playwright.
   `tests/books-labels.js` checks the rendered Books labels at 4 widths, both themes, self-links on/off.
+  `tests/graph-labels.js` checks that no verse-graph label touches an edge, arrowhead, node or other label, for 11
+  verses at 6 widths in both themes ("John 10:28" in John 3:16, "Rom 5:10" in Rom 5:6 and "1 Tim 1:15" in
+  Luke 19:10 must stay visible).
 - Canvas performance: never stroke per-arc with `multiply` (Chrome re-reads the canvas per stroke,
   ~100x slower). Accumulate on a transparent offscreen canvas and multiply that once, as `arcs.js` does.
 
@@ -107,7 +118,8 @@ Follow this for every new view (`src/views/arcs.js` is the reference implementat
    Hover and selection redraw only a light layer on top. Throttle redraws from continuous input
    (sliders) with `requestAnimationFrame`, never queueing frames, and do a final redraw on `change`.
 9. **Interaction**: mouse hover, keyboard (focusable, arrow keys, Enter, Escape, announced through an
-   `aria-live` region) and touch (tap replaces hover, a second tap activates).
+   `aria-live` region) and touch. Charts use tap-to-preview, tap-again-to-open (tap replaces hover); text
+   links open on a single tap.
 10. **Responsive**: works at 390px. Wide charts scroll sideways in their own container; the page never does.
 11. **Verify in Playwright**: both themes, 1280px and 390px, keyboard and tap paths, no console errors.
     Save screenshots under `.playwright-mcp/` (gitignored). For canvas views, report redraw times
@@ -189,6 +201,7 @@ separation, normal-vision floor, ≥3:1 against the background):
 | `--arc-nt` | NT→NT arcs, gold | `#A97A1E` | `#B08629` |
 | `--select` | selection in arc and verse views only, vermilion | `#C23B22` | `#F0775A` |
 | `--dim` | de-emphasised marks during selection | `#C9CEC7` | `#3A4258` |
+| `--edge` | verse-graph edges: `--ink-muted` 75% into `--paper` | `#7C827B` (3.6:1) | `#878580` (4.8:1) |
 | `--sec-law` | Law, madder | `#B1344A` | `#CF4F7E` |
 | `--sec-history` | History (OT), ochre | `#A67708` | `#B0821E` |
 | `--sec-poetry` | Poetry, verdigris | `#078C74` | `#1E9C86` |

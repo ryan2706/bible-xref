@@ -215,22 +215,33 @@ function refGroup(id, heading, links, target, emptyText, index) {
   return section;
 }
 
+// From 1100px the graph sits in its own column, sticky beside the text and references,
+// so it is sized to fit in the window.
+const SIDE_BY_SIDE = '(min-width: 1100px)';
+
 async function renderGraphSection(section, centerId, out, incoming, index) {
   const holder = h('div', { class: 'graph-holder' });
+  const legend = h('ul', { class: 'legend', 'aria-label': 'Legend' });
   section.replaceChildren(
     h('h2', { id: 'graph-title' }, 'Connections'),
     h(
       'p',
       { class: 'graph-note' },
-      'The 15 strongest links by votes. Arrows point from the citing verse to the verse it cites; thicker lines have more votes.',
+      'Up to 8 verses it references and 7 that reference it, the strongest by votes, placed around it in Bible order: Genesis at the lower left, Old Testament on the left, New Testament on the right, Revelation at the lower right. Arrows point from the citing verse to the verse it cites; thicker lines have more votes.',
     ),
     holder,
   );
   // Labels are measured for the layout, so wait for the web fonts first.
   await document.fonts.ready;
   if (!holder.isConnected) return;
-  const draw = () => renderGraph(holder, { centerId, out, incoming, index });
-  if (!draw()) {
+  const draw = () => {
+    const sticky = window.matchMedia(SIDE_BY_SIDE).matches;
+    // Room left in the window under the sticky top offset, heading, note and legend.
+    const maxHeight = sticky ? Math.max(360, window.innerHeight - (holder.offsetTop - section.offsetTop) - 96) : Infinity;
+    return renderGraph(holder, { centerId, out, incoming, index, maxHeight });
+  };
+  const kinds = draw();
+  if (!kinds) {
     holder.replaceWith(h('p', { class: 'status' }, 'This verse has no cross-references to draw.'));
     section.querySelector('.graph-note').remove();
     return;
@@ -248,13 +259,35 @@ async function renderGraphSection(section, centerId, out, incoming, index) {
     }, 150);
   });
   observer.observe(holder);
-  section.append(
-    h(
-      'ul',
-      { class: 'legend', 'aria-label': 'Legend' },
-      h('li', {}, h('span', { class: 'swatch ot' }), 'Old Testament'),
-      h('li', {}, h('span', { class: 'swatch nt' }), 'New Testament'),
+  // Only the kinds of mark this graph actually draws.
+  legend.append(
+    ...[
+      kinds.ot && h('li', {}, h('span', { class: 'swatch ot' }), 'Old Testament'),
+      kinds.nt && h('li', {}, h('span', { class: 'swatch nt' }), 'New Testament'),
       h('li', {}, h('span', { class: 'swatch current' }), 'This verse'),
-    ),
+      kinds.out && h('li', {}, arrowSwatch('out'), 'References'),
+      kinds.in && h('li', {}, arrowSwatch('in'), 'Referenced by'),
+      kinds.faint && h('li', {}, arrowSwatch('faint'), 'No votes yet'),
+    ].filter(Boolean),
   );
+  section.append(legend);
+}
+
+// A tiny edge for the legend: from this verse (out), into it (in), or dashed (faint).
+function arrowSwatch(kind) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs) => {
+    const node = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  };
+  const root = el('svg', { class: `swatch-edge ${kind === 'faint' ? 'faint' : 'strong'}`, width: 30, height: 12, viewBox: '0 0 30 12', 'aria-hidden': 'true' });
+  if (kind === 'faint') {
+    root.append(el('path', { class: 'graph-edge-line', d: 'M2,6 L28,6', 'stroke-width': 1.5 }));
+    return root;
+  }
+  root.append(el('circle', { class: 'swatch-dot', cx: 5, cy: 6, r: 4.5 }));
+  root.append(el('path', { class: 'graph-edge-line', d: 'M10,6 L29,6', 'stroke-width': 2 }));
+  root.append(el('path', { class: 'graph-arrow', d: kind === 'out' ? 'M24,6 L16,1.5 L16,10.5 z' : 'M13,6 L21,1.5 L21,10.5 z' }));
+  return root;
 }

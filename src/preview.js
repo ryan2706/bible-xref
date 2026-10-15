@@ -83,12 +83,26 @@ function scheduleHide() {
 }
 
 // Shows a preview of verse `id` when `el` is hovered or focused.
-export function attachPreview(el, index, id, title) {
+// tapTwice (for links in charts): on touch, the first tap on `el` shows the preview
+// and a second tap opens the link. Text links leave it off and open on a single tap.
+export function attachPreview(el, index, id, title, { tapTwice = false } = {}) {
   const open = () => show(el, title, getVerseText(index, id));
   el.addEventListener('mouseenter', open);
   el.addEventListener('focus', open);
   el.addEventListener('mouseleave', scheduleHide);
   el.addEventListener('blur', hide);
+  if (!tapTwice) return;
+  // Decided at pointerdown: the mouse events a tap emulates open the preview before `click`.
+  let firstTap = false;
+  el.addEventListener('pointerdown', (e) => {
+    firstTap = e.pointerType !== 'mouse' && !(current === el && popover && !popover.hidden);
+  });
+  el.addEventListener('click', (e) => {
+    if (!firstTap) return; // mouse, keyboard (Enter) or a second tap: follow the link
+    firstTap = false;
+    e.preventDefault();
+    open();
+  });
 }
 
 // A short fixed note (e.g. what votes are) on `el`, a button: hover, focus or a

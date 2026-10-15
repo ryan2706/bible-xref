@@ -23,10 +23,10 @@ const SECTIONS = [
     href: '#/verse/John.3.16',
     open: 'Open John 3:16 in the verse explorer',
     thumb: 'graph',
-    caption: 'John 3:16 and its 15 strongest links',
+    caption: 'John 3:16 and its 15 strongest connections',
     body: [
       'Type a reference such as “John 3:16” or “1 Jn 4 8” in the search box at the top of every page. The verse appears in a reading column, with its references in the margin beside it, as in a printed reference Bible: “References” lists the verses it points to and “Referenced by” lists the verses that point back to it, strongest first.',
-      'Below the text, the connections graph draws the 15 strongest links. Arrows run from the citing verse to the verse it cites, and thicker lines have more votes. Lapis marks Old Testament verses, gold New Testament verses. Hover over or focus any reference to read its text, and click it to go to that verse.',
+      'The connections graph, beside the references on a wide screen and below the text otherwise, draws 15 connected verses: up to 8 of the verses it references and 7 that reference it, the strongest by votes. Each verse sits around the centre at its place in the Bible: Genesis at the lower left, the Old Testament up the left side, the New Testament down the right, Revelation at the lower right. Arrows run from the citing verse to the verse it cites, and thicker lines have more votes. Lapis marks Old Testament verses, gold New Testament verses. Hover over or focus any reference to read its text, and click it to go to that verse. On a phone, tap a verse in the graph to read it and tap again to open it.',
     ],
   },
   {

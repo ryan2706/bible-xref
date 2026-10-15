@@ -38,6 +38,9 @@
   --sec-revelation: #a07f0f;
 
   --link: var(--arc-ot);
+  /* Connections graph edges: opaque, at least 3:1 against the paper in both themes
+     (about 3.6:1 light, 4.8:1 dark). */
+  --edge: color-mix(in srgb, var(--ink-muted) 75%, var(--paper));
 
   --font-title: 'IM Fell English', 'Iowan Old Style', Georgia, serif;
   --font-text: 'Newsreader', 'Iowan Old Style', Georgia, serif;
@@ -356,8 +359,9 @@ main > * {
 }
 
 /* Verse view: reading column with a margin column of references beside it,
-   like a printed reference Bible; the graph sits under the reading column.
-   Below ~720px everything stacks: text, references, graph. */
+   like a printed reference Bible. From 1100px the graph takes a third column,
+   sticky as the page scrolls; below that it sits under the reading column, and
+   below ~720px everything stacks: text, references, graph. */
 .verse-layout {
   display: grid;
   grid-template-columns: minmax(0, var(--measure)) var(--margin-col);
@@ -384,6 +388,24 @@ main > * {
 .graph-section {
   grid-area: graph;
   min-width: 0;
+}
+
+@media (min-width: 1100px) {
+  .verse-layout {
+    grid-template-columns: minmax(18rem, 32rem) var(--margin-col) minmax(24rem, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: 'text margin graph';
+    gap: 1.5rem 2.5rem;
+  }
+
+  .graph-section {
+    position: sticky;
+    top: 1.5rem;
+  }
+
+  .verse-layout .graph-section h2 {
+    margin-top: 0;
+  }
 }
 
 @media (max-width: 720px) {
@@ -888,24 +910,47 @@ main > * {
   overflow: visible;
 }
 
-.graph-edge {
+.graph-edge-line {
   fill: none;
-  stroke: var(--ink-muted);
-  stroke-opacity: 0.5;
+  stroke: var(--edge);
 }
 
-.graph-edge.faint {
-  stroke-dasharray: 3 3;
-  stroke-opacity: 0.35;
+.graph-arrow {
+  fill: var(--edge);
 }
 
-.arrowhead {
+/* Links with no votes yet: dashed, same colour so they stay visible. */
+.graph-edge.faint .graph-edge-line {
+  stroke-dasharray: 4 3;
+}
+
+.graph-edge.is-hot .graph-edge-line {
+  stroke: var(--ink);
+}
+
+.graph-edge.is-hot .graph-arrow {
+  fill: var(--ink);
+}
+
+/* The ellipse the verses sit on: Genesis to Malachi in lapis, Matthew to Revelation in gold. */
+.graph-guide path {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-opacity: 0.45;
+}
+
+.graph-guide-ot {
+  stroke: var(--arc-ot);
+}
+
+.graph-guide-nt {
+  stroke: var(--arc-nt);
+}
+
+.graph-end {
+  font-family: var(--font-ui);
+  font-size: 11px;
   fill: var(--ink-muted);
-  fill-opacity: 0.8;
-}
-
-.arrowhead.faint {
-  fill-opacity: 0.5;
 }
 
 .graph-node {
@@ -992,6 +1037,20 @@ main > * {
 
 .swatch.current {
   background: var(--select);
+}
+
+.graph-section .legend li {
+  display: inline-flex;
+  align-items: center;
+}
+
+.swatch-edge {
+  margin-right: 0.4rem;
+  overflow: visible;
+}
+
+.swatch-edge .swatch-dot {
+  fill: var(--select);
 }
 
 .preview-note {
@@ -1598,8 +1657,22 @@ main > * {
 
 
 .thumb-svg .g-edge {
-  stroke: var(--ink-muted);
-  stroke-opacity: 0.55;
+  stroke: var(--edge);
+}
+
+.thumb-svg .g-guide-ot,
+.thumb-svg .g-guide-nt {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-opacity: 0.45;
+}
+
+.thumb-svg .g-guide-ot {
+  stroke: var(--arc-ot);
+}
+
+.thumb-svg .g-guide-nt {
+  stroke: var(--arc-nt);
 }
 
 .thumb-svg .g-ot {
