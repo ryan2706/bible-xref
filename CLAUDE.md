@@ -20,6 +20,31 @@ across the whole Bible.
 - `npm run preview`: serve the production build locally
 - `npm run build:data`: regenerate the static JSON in `public/data/` (prints a size table)
 
+## Code map
+
+Shared modules. Reuse these in new views instead of re-implementing them.
+
+- `src/data.js`: every data fetch. Builds URLs from `BASE_URL` and caches each file's
+  promise in memory, so a book is downloaded once. `loadBooks`, `loadVerses(abbr)`,
+  `loadXrefs(abbr)`, `getVerseText(index, id)`. Add loaders for `overview.json`,
+  `book-matrix.json` and `search.json` here.
+- `src/refs.js`: verse IDs and references. `getIndex(books)` (memoised) gives `locate(id)`,
+  `label(id, short)`, `rangeLabel(start, end, short)`, `osis(id)`, `idOf(book, ch, v)`,
+  `parseOsis("John.3.16")`, `testament(id)` and book autocomplete. `parseTypedRef(text, index)`
+  parses what people type ("jn 3 16", "1 John 4:8"). Never format or parse references by hand.
+- `src/preview.js`: `attachPreview(el, index, id, title)` adds the verse-text popover on
+  hover/focus (one shared, dismissable popover). Works on HTML and SVG elements.
+- `src/theme.js`: light/dark toggle, `isDark()`, and a `themechange` window event.
+  `themeColor('--arc-ot')` reads a colour token for canvas drawing. `SECTIONS` and
+  `sectionOf(book)` give the 8 chord-diagram sections, their order and colour tokens.
+- `src/dom.js`: `h(tag, attrs, ...children)`. Children are set as text, never parsed as HTML.
+- `src/router.js` + `src/main.js`: hash routes. A new view needs a route pattern here and an
+  entry in the `views` map in `main.js`; the nav link's `data-view` must match.
+- `src/search.js`: header search combobox (reference lookup only; free-text search will
+  lazy-load `search.json`).
+- `src/views/`: `verse.js` (reading + margin columns), `verse-graph.js` (D3 force graph with
+  label-aware box collision), `placeholders.js` (Arcs, Books, About, not found).
+
 ## Tech rules
 
 - Vite + vanilla JavaScript (ES modules) + D3.js. No backend, no database.

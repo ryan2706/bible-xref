@@ -1,6 +1,7 @@
 import './style.css';
 import { startRouter } from './router.js';
 import { initThemeToggle } from './theme.js';
+import { initSearch } from './search.js';
 import { renderVerse } from './views/verse.js';
 import { renderArcs, renderBooks, renderAbout, renderNotFound } from './views/placeholders.js';
 
@@ -10,6 +11,7 @@ const views = { verse: renderVerse, arcs: renderArcs, books: renderBooks, about:
 let firstRoute = true;
 
 initThemeToggle(document.querySelector('.theme-toggle'));
+initSearch(document.querySelector('.site-search'));
 
 startRouter(async ({ view, params }) => {
   for (const link of navLinks) {

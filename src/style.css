@@ -244,34 +244,41 @@ main {
 }
 
 /* Verse view: reading column with a margin column of references beside it,
-   like a printed reference Bible. Below ~720px the margin moves underneath. */
+   like a printed reference Bible; the graph sits under the reading column.
+   Below ~720px everything stacks: text, references, graph. */
 .verse-layout {
   display: grid;
   grid-template-columns: minmax(0, var(--measure)) var(--margin-col);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'text margin'
+    'graph margin';
   gap: 1.5rem 3rem;
   align-items: start;
 }
 
 .reading-column {
+  grid-area: text;
   min-width: 0;
 }
 
 .margin-column {
+  grid-area: margin;
   border-left: 1px solid var(--rule);
   padding-left: 1.25rem;
   font-size: var(--step--1);
 }
 
-.margin-column h2 {
-  font-family: var(--font-ui);
-  font-size: var(--step-0);
-  font-weight: 700;
-  margin: 0 0 0.5rem;
+.graph-section {
+  grid-area: graph;
+  min-width: 0;
 }
 
 @media (max-width: 720px) {
   .verse-layout {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: 'text' 'margin' 'graph';
   }
 
   .margin-column {
@@ -308,4 +315,316 @@ main {
   color: var(--ink-muted);
   padding: 1rem;
   text-align: center;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Header search
+   --------------------------------------------------------------------------- */
+.site-search {
+  position: relative;
+  flex: 0 1 17rem;
+  margin: 0;
+}
+
+.site-search input {
+  width: 100%;
+  font: inherit;
+  font-size: 1rem; /* 16px stops iOS zooming on focus */
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--ink-muted);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+}
+
+.site-search input::placeholder {
+  color: var(--ink-muted);
+}
+
+.site-search [role='listbox'],
+.search-message:not(:empty) {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+}
+
+.site-search [role='listbox'] {
+  list-style: none;
+  padding: 0.25rem 0;
+}
+
+.site-search [role='option'] {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+
+.site-search [role='option']:hover,
+.site-search [role='option'][aria-selected='true'] {
+  background: color-mix(in srgb, var(--arc-ot) 14%, var(--paper));
+}
+
+.option-meta {
+  color: var(--ink-muted);
+  font-size: var(--step--1);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-message {
+  margin: 0;
+  font-size: var(--step--1);
+}
+
+.search-message:not(:empty) {
+  padding: 0.5rem 0.75rem;
+}
+
+@media (max-width: 720px) {
+  .site-search {
+    order: 4;
+    flex-basis: 100%;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Margin column: reference lists
+   --------------------------------------------------------------------------- */
+.ref-group + .ref-group {
+  margin-top: 2rem;
+}
+
+.ref-group h2 {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  font-weight: 700;
+  margin: 0;
+}
+
+.ref-count {
+  font-weight: 400;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ref-note {
+  margin: 0 0 0.5rem;
+  color: var(--ink-muted);
+}
+
+.ref-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ref-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding-block: 0.3rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.ref-link {
+  text-decoration: none;
+}
+
+.ref-link:hover,
+.ref-link:focus-visible {
+  text-decoration: underline;
+}
+
+.votes {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Zero-vote links are kept but faded (muted ink still meets text contrast). */
+.ref-list li.is-faint .ref-link {
+  color: var(--ink-muted);
+}
+
+.show-all {
+  font: inherit;
+  color: var(--link);
+  background: none;
+  border: 0;
+  padding: 0.5rem 0;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+
+/* Verse preview popover */
+.preview {
+  position: absolute;
+  z-index: 30;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.16);
+  padding: 0.75rem 0.875rem;
+  font-size: var(--step--1);
+}
+
+.preview strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.preview-text {
+  display: block;
+  font-family: var(--font-text);
+  font-size: var(--step-0);
+  line-height: 1.45;
+}
+
+/* ---------------------------------------------------------------------------
+   Connections graph
+   --------------------------------------------------------------------------- */
+.graph-section h2 {
+  font-family: var(--font-text);
+  font-weight: 500;
+  font-size: var(--step-3);
+  margin: 1.5rem 0 0.25rem;
+}
+
+.graph-note {
+  color: var(--ink-muted);
+  font-size: var(--step--1);
+  max-width: var(--measure);
+  margin: 0 0 0.5rem;
+}
+
+.graph {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.graph-edge {
+  fill: none;
+  stroke: var(--ink-muted);
+  stroke-opacity: 0.5;
+}
+
+.graph-edge.faint {
+  stroke-dasharray: 3 3;
+  stroke-opacity: 0.35;
+}
+
+.arrowhead {
+  fill: var(--ink-muted);
+  fill-opacity: 0.8;
+}
+
+.arrowhead.faint {
+  fill-opacity: 0.5;
+}
+
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-node:focus {
+  outline: none;
+}
+
+.graph-node circle {
+  fill: var(--arc-ot);
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+
+.graph-node.nt circle {
+  fill: var(--arc-nt);
+}
+
+.graph-node.is-current circle {
+  fill: var(--select);
+}
+
+.graph-node:hover circle,
+.graph-node:focus-visible circle {
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+
+.graph-node text,
+.graph-overlay-label {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* In busy graphs only the top nodes keep a label; the rest show it in an
+   overlay (drawn above all nodes) on hover/focus. */
+.graph-node.label-on-demand text {
+  visibility: hidden;
+}
+
+.graph-overlay-label {
+  pointer-events: none;
+}
+
+.graph-node.is-current text {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: -0.05em;
+}
+
+.swatch.ot {
+  background: var(--arc-ot);
+}
+
+.swatch.nt {
+  background: var(--arc-nt);
+}
+
+.swatch.current {
+  background: var(--select);
 }

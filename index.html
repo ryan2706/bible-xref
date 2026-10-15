@@ -30,6 +30,22 @@
         <a href="#/books" data-view="books">Books</a>
         <a href="#/about" data-view="about">About</a>
       </nav>
+      <form class="site-search" role="search" autocomplete="off">
+        <label class="visually-hidden" for="search-input">Go to a verse</label>
+        <input
+          id="search-input"
+          type="search"
+          placeholder="Go to a verse, e.g. John 3:16"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded="false"
+          aria-controls="search-options"
+          enterkeyhint="go"
+          spellcheck="false"
+        />
+        <ul id="search-options" role="listbox" aria-label="Books" hidden></ul>
+        <p class="search-message" role="status"></p>
+      </form>
       <button class="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
     </header>
     <main id="app" tabindex="-1"></main>

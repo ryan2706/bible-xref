@@ -18,21 +18,11 @@ function loadJson(path) {
 
 export const loadBooks = () => loadJson('books.json');
 export const loadVerses = (abbr) => loadJson(`verses/${abbr}.json`);
+export const loadXrefs = (abbr) => loadJson(`xrefs/${abbr}.json`);
 
-// Parses an OSIS-style reference like "John.3.16" into a verse.
-// Returns null if the book, chapter or verse doesn't exist.
-export function parseRef(ref, books) {
-  const m = /^([1-3]?[A-Za-z]+)\.(\d+)\.(\d+)$/.exec(ref);
-  if (!m) return null;
-  const book = books.find((b) => b.abbr.toLowerCase() === m[1].toLowerCase());
-  if (!book) return null;
-  const chapter = Number(m[2]);
-  const verse = Number(m[3]);
-  if (chapter < 1 || chapter > book.chapters) return null;
-  if (verse < 1 || verse > book.versesPerChapter[chapter - 1]) return null;
-  let id = book.firstId + verse - 1;
-  for (let c = 0; c < chapter - 1; c++) id += book.versesPerChapter[c];
-  return { book, chapter, verse, id };
+// Display text for one verse, loading (and caching) its book's file if needed.
+export async function getVerseText(index, id) {
+  const { book } = index.locate(id);
+  const { firstId, text } = await loadVerses(book.abbr);
+  return text[id - firstId];
 }
-
-export const formatRef = ({ book, chapter, verse }) => `${book.name} ${chapter}:${verse}`;
