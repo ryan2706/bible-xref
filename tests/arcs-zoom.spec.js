@@ -1,6 +1,6 @@
 // Arcs: zooming in to a book keeps the whole Bible on screen (focus plus context).
 import { test, expect } from './fixtures.js';
-import { chapterPoint } from './arcs-helpers.js';
+import { chapterPoint, zoomSettled } from './arcs-helpers.js';
 
 const hash = (page) => page.evaluate(() => location.hash);
 const noSidewaysScroll = (page) => page.locator('.arcs-scroll').evaluate((s) => s.scrollWidth <= s.clientWidth);
@@ -46,14 +46,18 @@ test.describe('zoom with touch', () => {
       test('previous/next move the zoom, and the whole Bible comes back', async ({ page }) => {
         await page.goto('#/arcs?zoom=Isa');
         const focusLine = page.locator('.arcs-focus');
+        // Each step waits for the zoom animation to finish (data-zoom), not for a time.
         await focusLine.getByRole('button', { name: 'Next book: Jeremiah' }).tap();
         await expect(focusLine.locator('strong')).toHaveText('Jeremiah');
+        await zoomSettled(page);
         expect(await hash(page)).toBe('#/arcs?zoom=Jer');
         await focusLine.getByRole('button', { name: 'Previous book: Isaiah' }).tap();
         await expect(focusLine.locator('strong')).toHaveText('Isaiah');
+        await zoomSettled(page);
         expect(await noSidewaysScroll(page)).toBe(true);
         await focusLine.getByRole('button', { name: 'Show the whole Bible' }).tap();
         await expect(focusLine).toBeHidden();
+        await zoomSettled(page);
         expect(await hash(page)).toBe('#/arcs');
         expect(await noSidewaysScroll(page)).toBe(true);
       });
@@ -93,13 +97,15 @@ test('older zoom=1 links zoom in to the linked chapter’s book', async ({ page 
 });
 
 test.describe('the zoom animates', () => {
-  // Counts redraws of the colour layer straight after the click, then once it settles.
+  // Counts redraws of the colour layer straight after the click, then once it settles
+  // (the chart's data-zoom says so).
   const zoomAndCount = (page) =>
     page.evaluate(async () => {
       performance.clearMeasures('arcs-draw');
+      const stack = document.querySelector('.arcs-stack');
       document.querySelector('.arcs-focus [data-step="1"]').click();
       const atOnce = performance.getEntriesByName('arcs-draw').length;
-      await new Promise((r) => setTimeout(r, 800));
+      while (stack.dataset.zoom !== 'settled') await new Promise((r) => setTimeout(r, 20));
       return { atOnce, settled: performance.getEntriesByName('arcs-draw').length };
     });
 
@@ -118,6 +124,22 @@ test.describe('the zoom animates', () => {
     const { atOnce, settled } = await zoomAndCount(page);
     expect(atOnce).toBe(1);
     expect(settled).toBe(1);
+  });
+
+  // A frame's timestamp is when the frame began, which on a slow machine can be before the
+  // zoom started. The first frame then had a negative t, eased chapters to negative widths,
+  // and drew arcs with negative radii (an IndexSizeError, which fails the test). Here every
+  // frame reports a time 200ms early.
+  test('with frame times from before it started', async ({ page }) => {
+    await page.addInitScript(() => {
+      const raf = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (cb) => raf((now) => cb(now - 200));
+    });
+    await page.goto('#/arcs?zoom=Isa');
+    await expect(page.locator('.arcs-focus')).toBeVisible();
+    await page.locator('.arcs-focus [data-step="1"]').click();
+    await expect(page.locator('.arcs-focus strong')).toHaveText('Jeremiah');
+    await zoomSettled(page);
   });
 });
 

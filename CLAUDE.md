@@ -23,7 +23,8 @@ across the whole Bible.
   `build:data`; needs Playwright's Chromium, and Google Fonts for the type, falling back with a warning offline)
 - `npm test`: production build, then every Playwright test in `tests/` against it, served by `vite preview` at
   http://localhost:4173/bible-xref/ (~20 s). `npx playwright test` reruns the tests without rebuilding;
-  `npx playwright test smoke` runs one file.
+  `npx playwright test smoke` runs one file. `CPU_THROTTLE=4 npx playwright test` slows every page 4x, like a slower
+  CI machine; tests wait for state (the Arcs chart's `data-zoom="settled"`, say), never for a fixed time.
 
 ## Code map
 
@@ -105,9 +106,9 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   `.verse-main`, which is `display: contents` below 1100px (text and graph left, lists in the margin column right; below
   720px text, lists, graph) and from 1100px the left column, the reference lists in a narrow right column; there it
   gets `.is-sticky` while it fits in the window, and the graph takes the verse text's reading width (`--measure`) and
-  left edge, and the height the text leaves under the sticky top, shrinking down to `MIN_GRAPH` (260px) so the column
-  stays sticky on laptop screens (1366×768); a verse too long for that gets a graph sized to the window and the column
-  scrolls; the graph redraws
+  left edge, and the height the text leaves under the sticky top, so the column stays sticky, as long as the circle keeps a
+  radius of `MIN_STICKY_RADIUS` (130px); below that the graph takes its full size (up to the window's height) and the
+  column scrolls; the graph redraws
   when the column's width, the window's height or the text above it changes; hovering or focusing a reference in the
   lists lights up its dot and that direction's edge in the graph (`linker`), and hovering a dot lights up its rows;
   the legend lists only the kinds of mark the graph
@@ -115,7 +116,7 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   localStorage `welcome-dismissed`; previous/next verse buttons, also ← and → keys; a link to the chapter on
   the arc diagram), `verse-graph.js` (radial SVG graph from `radialLayout`: edges thick by votes with
   an arrowhead 70% of the way out, a node's edges darken and its dot gets a ring on hover/focus, also driven from
-  outside by the returned `highlight(id, dir)`, with `onHighlight(id)` reporting graph hovers; if the labels can't all fit, the
+  outside by the returned `highlight(id, dir)` (it also returns the circle's `radius`), with `onHighlight(id)` reporting graph hovers; if the labels can't all fit, the
   lowest-voted label still overlapping is hidden until hover, one at a time until none overlap), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
   canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`, and `&ch=Isa.53`
   starts with that chapter highlighted and keeps the pinned chapter in the URL; below 720px that chapter is described
@@ -128,7 +129,7 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   and previous/next book buttons (one-chapter books are under a pixel wide); zooming in is focus plus context
   (`widthsFor`): the book's chapters get up to `FOCUS_MAX` (16px) each, within `FOCUS_SHARE` (80%) of the width, every
   other book is squeezed proportionally into the rest, and arcs keep their real ends; `&zoom=Isa` (older `zoom=1`
-  links zoom to the `&ch=` chapter's book); the change animates over `FOCUS_MS`, redrawing only the colour layer per
+  links zoom to the `&ch=` chapter's book); the change animates over `FOCUS_MS` (`.arcs-stack` has `data-zoom="moving"` until it settles), redrawing only the colour layer per
   frame, and jumps under reduced motion; the focus line (`.arcs-focus`) names the book, "Show the whole Bible" and
   previous/next buttons that move the zoom; taps inside the zoomed book always pick chapters, however narrow (Psalms
   gets ~1.8px at 390px), taps elsewhere pick books; where the zoomed book's chapters are under `CHIPS_BELOW` (8px),
@@ -162,7 +163,7 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   visible, except 1 Tim 1:15 at 390px, where one half of the circle can't hold all its graph's labels). Both have a negative control that must be flagged (the graph test two: a label on an edge, and
   "Revelation" beside a verse label).
   `arcs-zoom.spec.js` covers the Arcs zoom at 390, 768 and 1024px with touch (Psalms, Jude, previous/next,
-  the keyboard, the animation and reduced motion) and the chapter chips (Psalms and Isaiah at 390px, Psalms at 768px), placing taps with `chapterPoint()` from `arcs-helpers.js`, which
+  the keyboard, the animation, reduced motion, and frame times from before the zoom started) and the chapter chips (Psalms and Isaiah at 390px, Psalms at 768px), placing taps with `chapterPoint()` from `arcs-helpers.js`, which
   mirrors the chart's geometry (update it if `PAD_X`, `TESTAMENT_GAP` or the focus constants change).
   `regressions.spec.js` holds a test per code-review finding (numbered as in the review); `build-data.spec.js`
   builds from a copy of `data-raw/` (`DATA_RAW`, `DATA_OUT`, `DATA_MAX_BYTES` overrides, for tests only) and checks

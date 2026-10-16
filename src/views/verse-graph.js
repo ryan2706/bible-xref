@@ -270,5 +270,6 @@ export function renderGraph(container, { centerId, out, incoming, index, maxHeig
     out: edges.some((e) => e.dir === 'out'),
     in: edges.some((e) => e.dir === 'in'),
     faint: edges.some((e) => e.votes === 0),
+    radius: L.radius,
   };
 }

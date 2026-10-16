@@ -310,7 +310,7 @@ function refGroup(id, heading, links, target, emptyText, index, lit, dir) {
 // verse text there; if the text leaves too little room, the column scrolls normally.
 const SIDE_BY_SIDE = '(min-width: 1100px)';
 const STICKY_TOP = 24; // .verse-main.is-sticky top, 1.5rem
-const MIN_GRAPH = 260; // about the shortest graph that holds a full set of dots, labels and end marks
+const MIN_STICKY_RADIUS = 130; // a smaller circle isn't worth keeping the column sticky for
 
 async function renderGraphSection(section, centerId, out, incoming, index, link) {
   const holder = h('div', { class: 'graph-holder' });
@@ -320,21 +320,23 @@ async function renderGraphSection(section, centerId, out, incoming, index, link)
   await document.fonts.ready;
   if (!holder.isConnected) return;
   const sideBySide = () => window.matchMedia(SIDE_BY_SIDE).matches;
+  // The graph's width, its full height (never taller than the window, wherever it sits) and,
+  // from 1100px, the room the text and heading leave under it when the column is pinned.
   const size = () => {
     const legendRoom = (section.querySelector('.legend')?.offsetHeight ?? 56) + 16;
-    // Never taller than the window, wherever it sits.
-    const fitWindow = window.innerHeight - STICKY_TOP - legendRoom;
-    if (!sideBySide()) return { width: holder.clientWidth, maxHeight: fitWindow };
-    // Pinned at the top of the window, the graph gets what the text and heading leave.
+    const full = window.innerHeight - STICKY_TOP - legendRoom;
     const above = holder.getBoundingClientRect().top - main.getBoundingClientRect().top;
-    const room = fitWindow - above;
-    return { width: holder.clientWidth, maxHeight: room >= MIN_GRAPH ? room : fitWindow };
+    return { width: holder.clientWidth, full, room: sideBySide() ? full - above : null };
   };
   const updateSticky = () => main.classList.toggle('is-sticky', sideBySide() && main.offsetHeight + STICKY_TOP <= window.innerHeight);
   let drawn;
+  // Sized to the room, so the column can stay sticky, unless that leaves the circle under
+  // MIN_STICKY_RADIUS: then at full size, and the column scrolls.
   const draw = () => {
     drawn = size();
-    const result = renderGraph(holder, { centerId, out, incoming, index, ...drawn, onHighlight: (id) => link.fromGraph(id) });
+    const render = (maxHeight) => renderGraph(holder, { centerId, out, incoming, index, maxHeight, onHighlight: (id) => link.fromGraph(id) });
+    let result = drawn.room > 0 ? render(drawn.room) : null;
+    if (!result || result.radius < MIN_STICKY_RADIUS) result = render(drawn.full);
     link.setGraph(result || null);
     return result;
   };
@@ -353,8 +355,8 @@ async function renderGraphSection(section, centerId, out, incoming, index, link)
       return;
     }
     const next = size();
-    const changed = (a, b) => Math.abs(a - b) >= 24 || (a === Infinity) !== (b === Infinity);
-    if (changed(next.width, drawn.width) || changed(next.maxHeight, drawn.maxHeight)) draw();
+    const changed = (a, b) => (a === null) !== (b === null) || Math.abs(a - b) >= 24;
+    if (['width', 'full', 'room'].some((k) => changed(next[k], drawn[k]))) draw();
     updateSticky();
   };
   const later = () => {

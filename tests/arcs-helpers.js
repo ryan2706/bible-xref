@@ -1,7 +1,14 @@
+import { expect } from './fixtures.js';
+
+// Waits until the arc diagram's zoom animation (if any) has finished.
+export const zoomSettled = (page) => expect(page.locator('.arcs-stack')).toHaveAttribute('data-zoom', 'settled');
+
 // Where a chapter sits on the arc diagram, worked out from the chart's own geometry
 // (src/views/arcs.js: PAD_X 6, TESTAMENT_GAP 10, and when zoomed in to a book,
-// FOCUS_SHARE 0.8 and FOCUS_MAX 16). Returns the point to tap and the chapter's width.
-export function chapterPoint(page, osisChapter, focusAbbr = null) {
+// FOCUS_SHARE 0.8 and FOCUS_MAX 16), once any zoom has settled. Returns the point to tap
+// and the chapter's width.
+export async function chapterPoint(page, osisChapter, focusAbbr = null) {
+  await zoomSettled(page);
   return page.evaluate(
     async ([want, focusAbbr]) => {
       const books = await (await fetch('data/books.json')).json();

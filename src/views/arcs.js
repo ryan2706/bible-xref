@@ -161,7 +161,7 @@ function buildChart(figure, hint, index, overview, initial) {
   const [baseCanvas, dimCanvas, hiCanvas] = canvases;
   dimCanvas.hidden = true;
   const marker = h('div', { class: 'arcs-marker', 'aria-hidden': 'true' });
-  const stack = h('div', { class: 'arcs-stack' }, ...canvases, marker);
+  const stack = h('div', { class: 'arcs-stack', 'data-zoom': 'settled' }, ...canvases, marker);
   const live = h('p', { class: 'visually-hidden', 'aria-live': 'polite' });
   const scroller = h(
     'div',
@@ -732,9 +732,12 @@ function buildChart(figure, hint, index, overview, initial) {
     if (note >= 0) setNote(-1);
     renderNotes();
     writeQuery(minVotes, book, focus, null);
+    // The chart says when the zoom has settled (data-zoom), so tests can wait for it.
+    stack.dataset.zoom = 'moving';
     const settle = () => {
       relayout();
       if (keep >= 0) select(keep, { pin: true, inline: keepInline });
+      stack.dataset.zoom = 'settled';
     };
     renderFocusLine(focusStep);
     if (hadFocus && !focusStep) {
@@ -755,7 +758,9 @@ function buildChart(figure, hint, index, overview, initial) {
     const start = performance.now();
     const frame = (now) => {
       if (!stack.isConnected) return;
-      const t = Math.min(1, (now - start) / FOCUS_MS);
+      // A frame's timestamp can be a little before start (it is when the frame began), and
+      // a negative t would ease past the old widths into negative ones.
+      const t = Math.max(0, Math.min(1, (now - start) / FOCUS_MS));
       const e = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2; // ease in-out
       if (t < 1) {
         L = layout(to.map((w, c) => from[c] + (w - from[c]) * e));
