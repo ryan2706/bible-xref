@@ -69,7 +69,8 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   canonical order: Genesis lower left, OT up the left, NT down the right, Revelation lower right, each verse kept on
   its testament's half and never shifted or squashed when the links are one-sided; it nudges crowded nodes apart in
   order (balancing pushes, then sweeps for long jams) until no label overlaps, and reports any that still do in
-  `clashing`; labels outside the circle, edges inside; "Genesis" and "Revelation" hang from ticks dropped from the
+  `clashing`; it sizes the radius to `maxHeight` by the drawing's real height, so label room above the circle is only
+  taken when a node at the top has a label; labels outside the circle, edges inside; "Genesis" and "Revelation" hang from ticks dropped from the
   ends, on their own row under the gap, where no verse label reaches) are shared by `verse-graph.js` and the
   thumbnail build.
 - `src/dom.js`: `h(tag, attrs, ...children)`. Children are set as text, never parsed as HTML.

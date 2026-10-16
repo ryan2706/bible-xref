@@ -222,6 +222,10 @@ function endMarks(g, o) {
   return marks;
 }
 
+// The whole circle, drawn or not (its stroke is under 2px), so a graph is never squashed
+// above or below.
+const circleBox = (g) => ({ top: -g.radius - 1, bottom: g.radius + 1 });
+
 /**
  * nodes: [{ id, labelWidth (0 for no label), bothWays?, r? }] — every linked verse, not the centre.
  * options: width, maxHeight, ntStart, lastId, r (node radius), rCenter, labelGap,
@@ -235,11 +239,11 @@ export function radialLayout(nodes, options) {
   const prepared = nodes.map((n) => ({ ...n, angle0: canonicalAngle(n.id, o.ntStart, o.lastId) }));
   const cl = o.centerLabel;
   const cx = o.width / 2;
-  // Above the circle: a label over a node at the top. Below it: the lowest of the circle and
-  // the end marks (at most two lines under the labels of nodes at the ends).
-  const above = o.r + o.labelGap + o.labelHeight;
+  // A first guess at the height a radius needs: the circle, and below it the end marks (at
+  // most two lines under the labels of nodes at the ends). Labels over nodes at the top
+  // only count once the layout shows there are some (heightOf).
   const belowEnds = o.r + o.labelGap + o.labelHeight + o.pad + 2 * (o.endLabelHeight ?? o.labelHeight);
-  const heightFor = (radius) => o.edgePad + above + radius + Math.max(radius, radius * -Math.cos(SPAN) + belowEnds) + o.edgePad;
+  const heightFor = (radius) => o.edgePad + radius + Math.max(radius, radius * -Math.cos(SPAN) + belowEnds) + o.edgePad;
   // The largest circle the height allows, and the width (with room for the widest label on each side).
   // Never smaller than the circle whose busiest half holds its dots without touching.
   const busiest = Math.max(...[-1, 1].map((side) => prepared.filter((n) => Math.sign(n.angle0) === side).length));
@@ -264,10 +268,19 @@ export function radialLayout(nodes, options) {
     const fits = !placed.some((p) => out(p.dot) || (p.label && out(p.label))) && !endMarks(g, o).some((m) => out(m.box));
     return { g, placed, overlapCount, clashing, fits };
   };
+  // The drawing's real height: whatever it has above and below the circle.
+  const heightOf = ({ g, placed }) => {
+    const boxes = [...placed.flatMap(boxesOf), ...endMarks(g, o).map((m) => m.box), circleBox(g)];
+    return Math.max(...boxes.map((b) => b.bottom)) - Math.min(...boxes.map((b) => b.top)) + 2 * o.edgePad;
+  };
   let result = fitsAt(radius);
-  for (let grow = radius * 1.04; result.fits && grow <= o.maxRadius && heightFor(grow) <= o.maxHeight; grow *= 1.04) {
+  // Shrink until the real height fits (it is about twice the radius, so take half the excess).
+  for (let over; result.g.radius > rMin && (over = heightOf(result) - o.maxHeight) > 0; ) {
+    result = fitsAt(Math.max(rMin, result.g.radius - Math.max(1, over / 2)));
+  }
+  for (let grow = result.g.radius * 1.04; result.fits && grow <= o.maxRadius; grow *= 1.04) {
     const bigger = fitsAt(grow);
-    if (!bigger.fits || bigger.overlapCount > result.overlapCount) break;
+    if (!bigger.fits || bigger.overlapCount > result.overlapCount || heightOf(bigger) > o.maxHeight) break;
     result = bigger;
   }
   while (!result.fits && result.g.radius > rMin) result = fitsAt(Math.max(rMin, result.g.radius * 0.96));
@@ -275,7 +288,7 @@ export function radialLayout(nodes, options) {
   // Shift everything down so the top of the drawing sits at edgePad, then size the height.
   const { g, placed, overlapCount, clashing } = result;
   const ends = endMarks(g, o);
-  const all = [...placed.flatMap(boxesOf), ...ends.map((m) => m.box), { top: -g.radius - (o.labelHeight ? above : o.r), bottom: g.radius }];
+  const all = [...placed.flatMap(boxesOf), ...ends.map((m) => m.box), circleBox(g)];
   const clTop = cl ? centerLabelTop(placed, prepared, g, o) : 0;
   const centerLabel = cl ? { left: g.cx - cl.width / 2, right: g.cx + cl.width / 2, top: clTop, bottom: clTop + cl.height } : null;
   if (centerLabel) all.push(centerLabel);

@@ -1134,7 +1134,8 @@ main > * {
   font-family: var(--font-text);
   font-weight: 500;
   font-size: var(--step-3);
-  margin: 1.5rem 0 0.25rem;
+  /* 0.75rem to the graph, as under About's headings: the SVG starts with a 6px edge pad. */
+  margin: 1.5rem 0 calc(0.75rem - 6px);
 }
 
 
