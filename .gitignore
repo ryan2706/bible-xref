@@ -32,3 +32,4 @@ public/data/
 # Playwright test output
 /test-results/
 /playwright-report/
+public/og-image.png

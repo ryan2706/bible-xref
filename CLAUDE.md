@@ -19,6 +19,8 @@ across the whole Bible.
 - `npm run build`: regenerate data, then production build into `dist/`
 - `npm run preview`: serve the production build locally
 - `npm run build:data`: regenerate the static JSON in `public/data/` (prints a size table)
+- `npm run build:og`: redraw `public/og-image.png`, the 1200×630 link-preview image (run by `prebuild` after
+  `build:data`; needs Playwright's Chromium, and Google Fonts for the type, falling back with a warning offline)
 - `npm test`: production build, then every Playwright test in `tests/` against it, served by `vite preview` at
   http://localhost:4173/bible-xref/ (~20 s). `npx playwright test` reruns the tests without rebuilding;
   `npx playwright test smoke` runs one file.
@@ -225,6 +227,12 @@ Files in `public/data/`:
   (~170 KB, ~27 KB gzipped, in all). No colours inside: marks carry classes (`a-ot`, `c0`…`c7`, `g-sel`…) coloured
   in `style.css` from the theme tokens. Arcs whose ends share a 4-unit bin are merged and drawn more opaque; only the
   ribbons carrying 90% of the votes are drawn.
+
+Link previews: `index.html` has Open Graph and Twitter card tags with absolute URLs
+(`https://ryan2706.github.io/bible-xref/…`). Their image, `public/og-image.png` (gitignored), comes from
+`scripts/build-og.mjs`: the real arc diagram from `overview.json` at the default 50+ votes, drawn on a canvas in
+Chromium with the arc view's opacity rules and the dark tokens read from `src/style.css`, plus the site name.
+README screenshots live in `docs/screenshots/` (1280px, light theme); retake them when a view changes visibly.
 
 Cleanup rules in the build script (it exits with an error, so nothing deploys, on any file over 5 MB, any
 cross-reference row it can't parse, or a `MARGIN_NOTES` entry that stops matching):

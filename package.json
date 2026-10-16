@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "build:data": "node scripts/build-data.mjs",
-    "prebuild": "npm run build:data",
+    "build:og": "node scripts/build-og.mjs",
+    "prebuild": "npm run build:data && npm run build:og",
     "predev": "npm run build:data",
     "test": "npm run build && playwright test"
   },

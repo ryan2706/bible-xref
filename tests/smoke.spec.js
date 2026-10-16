@@ -127,6 +127,23 @@ test('About loads its 3 thumbnails', async ({ page }) => {
   for (const svg of await thumbs.all()) expect(await svg.locator('*').count()).toBeGreaterThan(10);
 });
 
+test('link-preview tags use absolute URLs and the 1200×630 image is built', async ({ page, request }) => {
+  await page.goto('./');
+  const meta = (attr, key) => page.locator(`meta[${attr}="${key}"]`).getAttribute('content');
+  const site = 'https://ryan2706.github.io/bible-xref/';
+  expect(await meta('property', 'og:url')).toBe(site);
+  expect(await meta('property', 'og:image')).toBe(`${site}og-image.png`);
+  expect(await meta('name', 'twitter:image')).toBe(`${site}og-image.png`);
+  expect(await meta('name', 'twitter:card')).toBe('summary_large_image');
+  for (const key of ['og:title', 'og:description', 'og:image:alt']) expect(await meta('property', key)).toBeTruthy();
+  // The deployed image, served locally: a PNG whose header says 1200×630.
+  const res = await request.get('og-image.png');
+  expect(res.ok()).toBe(true);
+  const png = await res.body();
+  expect(png.subarray(1, 4).toString()).toBe('PNG');
+  expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+});
+
 // The fixture fails a test on any console error; this visits every view, both themes.
 for (const scheme of ['light', 'dark']) {
   test(`no console errors on any view (${scheme})`, async ({ page }) => {
