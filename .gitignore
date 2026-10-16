@@ -28,3 +28,7 @@ public/data/
 
 # Playwright MCP screenshots and snapshots
 .playwright-mcp/
+
+# Playwright test output
+/test-results/
+/playwright-report/

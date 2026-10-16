@@ -9,9 +9,11 @@
     "preview": "vite preview",
     "build:data": "node scripts/build-data.mjs",
     "prebuild": "npm run build:data",
-    "predev": "npm run build:data"
+    "predev": "npm run build:data",
+    "test": "npm run build && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "vite": "^8.3.0"
   },
   "dependencies": {

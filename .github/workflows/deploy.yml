@@ -1,6 +1,7 @@
-# Builds the site and publishes it to GitHub Pages (https://ryan2706.github.io/bible-xref/).
-# `npm run build` runs `build:data` first (prebuild), so public/data/ is regenerated
-# from data-raw/ on every deploy; it is gitignored and never committed.
+# Builds and tests the site, then publishes it to GitHub Pages (https://ryan2706.github.io/bible-xref/).
+# `npm test` runs `npm run build` (which runs `build:data` first, so public/data/ is
+# regenerated from data-raw/ on every deploy; it is gitignored and never committed),
+# then the Playwright tests against that build. If any test fails, nothing is deployed.
 name: Deploy to GitHub Pages
 
 on:
@@ -28,7 +29,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist

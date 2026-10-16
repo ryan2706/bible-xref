@@ -19,6 +19,9 @@ across the whole Bible.
 - `npm run build`: regenerate data, then production build into `dist/`
 - `npm run preview`: serve the production build locally
 - `npm run build:data`: regenerate the static JSON in `public/data/` (prints a size table)
+- `npm test`: production build, then every Playwright test in `tests/` against it, served by `vite preview` at
+  http://localhost:4173/bible-xref/ (~20 s). `npx playwright test` reruns the tests without rebuilding;
+  `npx playwright test smoke` runs one file.
 
 ## Code map
 
@@ -114,12 +117,16 @@ Shared modules. Reuse these in new views instead of re-implementing them.
 - Page layout: header, views and footer share one centred column, `--page-max` (80rem) wide. `main` is a grid with
   `full` and `content` columns; every view's children sit in `content`, and a chart that needs more width can use
   `grid-column: full` (the arc diagram does, through a subgrid, so its controls and legend stay in the column).
-- Label checks: in dev, `books.js` and `arcs.js` verify after every layout that each label sits inside its
-  own section, log a console error if not, and put the result on `window.__labelCheck` for Playwright.
-  `tests/books-labels.js` checks the rendered Books labels at 4 widths, both themes, self-links on/off.
-  `tests/graph-labels.js` checks that no verse-graph label touches an edge, arrowhead, node or other label, for 11
-  verses at 6 widths in both themes ("John 10:28" in John 3:16, "Rom 5:10" in Rom 5:6 and "1 Tim 1:15" in
-  Luke 19:10 must stay visible).
+- Tests (`tests/`, `@playwright/test`, config in `playwright.config.js`): `tests/fixtures.js` exports a `test`
+  that fails on any console error or uncaught exception, and `skipWelcome(context)`; import `test`/`expect` from
+  it, not from `@playwright/test`. `smoke.spec.js` covers each view's main paths and shared URLs (search, verse
+  steps across Malachi → Matthew, graph dots, Arcs `?ch=`/`?book=`/`?min=`, Books opening on Isaiah and `?pair=`,
+  About's thumbnails, every view in both themes). Label checks: in dev, `books.js` and `arcs.js` also verify after
+  every layout that each label sits inside its own section, log a console error if not, and put the result on
+  `window.__labelCheck`. `books-labels.spec.js` measures the rendered Books labels at 4 widths, both themes,
+  self-links on/off. `graph-labels.spec.js` checks that no verse-graph label touches an edge, arrowhead, node or
+  other label, for 11 verses at 6 widths in both themes ("John 10:28" in John 3:16, "Rom 5:10" in Rom 5:6 and
+  "1 Tim 1:15" in Luke 19:10 must stay visible). Both have a negative control that must be flagged.
 - Canvas performance: never stroke per-arc with `multiply` (Chrome re-reads the canvas per stroke,
   ~100x slower). If a blend mode is ever needed, accumulate on a transparent offscreen canvas and blend that once.
 
@@ -154,7 +161,8 @@ Follow this for every new view (`src/views/arcs.js` is the reference implementat
    links open on a single tap.
 10. **Responsive**: works at 390px. Wide charts scroll sideways in their own container; the page never does.
 11. **Verify in Playwright**: both themes, 1280px and 390px, keyboard and tap paths, no console errors.
-    Save screenshots under `.playwright-mcp/` (gitignored). For canvas views, report redraw times
+    Add smoke tests for the view and its shared URLs to `tests/smoke.spec.js` and its route to the
+    console-error test there; `npm test` must pass. Save screenshots under `.playwright-mcp/` (gitignored). For canvas views, report redraw times
     (with 4x CPU throttling for anything driven by a slider).
 12. **Docs**: add the view to the code map above and any new shared helpers to their module's entry.
 
@@ -270,5 +278,6 @@ Chart rules:
 - Run the dev server to check each change.
 - After each task, tell the user exactly what to look at in the browser (URL/route and what they should see).
 - This is a solo project: when I say commit and push, push to main directly.
-- Pushing to main deploys the site: `.github/workflows/deploy.yml` builds it (which regenerates `public/data/`
-  from `data-raw/`) and publishes `dist/` to GitHub Pages.
+- Pushing to main deploys the site: `.github/workflows/deploy.yml` runs `npm test` (which builds the site,
+  regenerating `public/data/` from `data-raw/`, and runs the Playwright tests against it) and publishes `dist/` to
+  GitHub Pages only if every test passes. Run `npm test` before pushing.
