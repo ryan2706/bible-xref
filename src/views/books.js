@@ -11,7 +11,7 @@ import { h } from '../dom.js';
 import { loadBooks, loadBookMatrix, loadXrefs, getVerseText } from '../data.js';
 import { getIndex } from '../refs.js';
 import { themeColor, SECTIONS, sectionOf, GROUP_NAMES } from '../theme.js';
-import { showPreview, hidePreview } from '../preview.js';
+import { showPreview, hidePreview, trim } from '../preview.js';
 import { votesText, votesEl, votesHelp } from '../votes.js';
 import { viewHeader } from '../view-header.js';
 import { controlBar, control, toggleSwitch } from '../controls.js';
@@ -55,10 +55,6 @@ const same = (x, y) => x === y || (!!x && !!y && x.type === y.type && x.a === y.
 // The books a selection covers: one, a pair, or a run under a group label (a..b).
 const booksOf = (sel) => (sel.type === 'group' ? Array.from({ length: sel.b - sel.a + 1 }, (_, k) => sel.a + k) : sel.type === 'pair' ? [sel.a, sel.b] : [sel.a]);
 
-function trim(text) {
-  if (text.length <= TEXT_CHARS) return text;
-  return text.slice(0, text.lastIndexOf(' ', TEXT_CHARS)) + ' …';
-}
 
 // The selection lives in the hash so it can be shared: #/books?pair=Isa-Matt,
 // #/books?book=Isa or #/books?books=Nah-Zeph (a run of books under one group
@@ -867,7 +863,7 @@ function buildChart(figure, hint, index, matrix, initial) {
   }
 
   function pairItem({ link: [from, toStart, toEnd, votes], fromText, toText }) {
-    const toShown = trim(toText);
+    const toShown = trim(toText, TEXT_CHARS);
     const ref = (start, end) => h('a', { href: `#/verse/${index.osis(start)}`, class: 'ref-link' }, index.rangeLabel(start, end));
     return h(
       'li',
@@ -878,7 +874,7 @@ function buildChart(figure, hint, index, matrix, initial) {
         h('span', {}, ref(from, from), h('span', { 'aria-hidden': 'true' }, ' → '), h('span', { class: 'visually-hidden' }, ' cites '), ref(toStart, toEnd)),
         votesEl(votes),
       ),
-      h('p', { class: 'books-pair-text' }, trim(fromText)),
+      h('p', { class: 'books-pair-text' }, trim(fromText, TEXT_CHARS)),
       h('p', { class: 'books-pair-text' }, toShown + (toEnd > toStart && !toShown.endsWith('…') ? ' …' : '')),
     );
   }
@@ -942,7 +938,7 @@ function buildChart(figure, hint, index, matrix, initial) {
     if (chart.matches(':focus-visible')) setHover({ type: 'book', a: cursor }, { isSticky: true, how: 'key', announce: true });
   });
   chart.addEventListener('blur', () => {
-    if (sticky) setHover(null);
+    if (sticky && chart.isConnected) setHover(null); // not as the view is being replaced
   });
   chart.addEventListener('keydown', (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -1003,6 +999,7 @@ function buildChart(figure, hint, index, matrix, initial) {
     if (!stack.isConnected) return observer.disconnect();
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      if (!stack.isConnected) return observer.disconnect(); // navigated away meanwhile
       const W = Math.round(Math.max(260, Math.min(MAX_SIZE, chart.clientWidth)));
       if (W === L.W) return;
       setHover(null);

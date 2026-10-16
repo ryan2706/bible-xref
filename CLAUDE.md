@@ -43,6 +43,7 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   hover/focus (one shared, dismissable popover). Works on HTML and SVG elements. Pass `tapTwice: true` for links
   inside charts (first tap previews, second opens); text links leave it off and open on a single tap.
   `showPreview(anchor, title, note)` / `hidePreview()` drive the same popover by hand (e.g. for canvas);
+  `trim(text, max)` shortens verse text at a word break with " …" (use it, never a local copy);
   `note` is a string or an element (e.g. a list). `attachNote(button, title, note)` opens a fixed note on hover,
   focus or tap.
 - `src/votes.js`: votes explained one way everywhere. `VOTES_HELP` (the wording), `votesText(n)` ("986 votes"),
@@ -86,10 +87,15 @@ Shared modules. Reuse these in new views instead of re-implementing them.
 - Footer (`index.html`): one line, the OpenBible.info credit (CC BY 4.0) and a link to About, which has the full
   credits.
 - `src/router.js` + `src/main.js`: hash routes (see the New view checklist below). A new view needs a route pattern here and an
-  entry in the `views` map in `main.js`; the nav link's `data-view` must match.
+  entry in the `views` map in `main.js`; the nav link's `data-view` must match. Each route part is decoded exactly
+  once: path parts by the router, query parts (marked `query: true`) left encoded for `URLSearchParams`; a malformed
+  escape anywhere shows the not-found page. After navigation `main.js` moves focus to the new h1 only if no later
+  navigation started and focus is still where the navigation left it (the link or button used, or the page).
 - `src/search.js`: header search combobox (reference lookup only; free-text search will
   lazy-load `search.json`).
-- `src/views/`: `verse.js` (reading + margin columns, and from 1100px a third, sticky column for the graph, sized
+- `src/views/`: `verse.js` (the verse text and the cross-references load independently, and a failed one shows
+  `loadError(message, retry)`, an error with a Retry button, in its own place while the other stays; the h1 reads
+  "Loading…" until books.json is in, never a hand-formatted reference; reading + margin columns, and from 1100px a third, sticky column for the graph, sized
   to fit the window; below 1100px the graph sits under the text; the legend lists only the kinds of mark the graph
   draws; a first-visit welcome band, dismissal kept in
   localStorage `welcome-dismissed`; previous/next verse buttons, also ← and → keys; a link to the chapter on
@@ -97,14 +103,16 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   an arrowhead 70% of the way out, a node's edges darken on hover/focus, labels hidden until hover only if they
   can't all fit), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
   canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`, and `&ch=Isa.53`
-  starts with that chapter highlighted and keeps the pinned chapter in the URL; on phones that chapter is described
+  starts with that chapter highlighted and keeps the pinned chapter in the URL; below 720px that chapter is described
   in an inline line under the controls instead of the popover; the hover/tap hint is in "How to read this"; up to
   three numbered notes (Psalms and Isaiah, Paul's letters, the Synoptics) with numbers worked out from the arcs shown,
   markers on the axis, and hover/focus/click highlighting their arcs; hidden while a book is chosen or by the "Show notes"
-  switch, kept in localStorage `arcs-notes-hidden`; the "Old Testament"/"New Testament" labels are inset to the page column even though the chart is wider; below 720px the chart opens fitted to the screen, where a tap selects
-  a whole book (chapters are ~0.3px wide) and the inline line offers "Zoom in to <Book>" and previous/next book buttons
-  (one-chapter books are under a pixel wide); "Zoom in" switches to the
-  1700px sideways-scrolling chart, `&zoom=1`, where taps pick chapters),
+  switch, kept in localStorage `arcs-notes-hidden`; the "Old Testament"/"New Testament" labels are inset to the page column even though the chart is wider; the chart
+  opens fitted to the screen, where chapters are under `MIN_TAP` (4px) wide (~0.3px on phones, ~0.8px on tablets), so
+  a touch tap selects a whole book, at any width, and the inline line offers "Zoom in to <Book>" and previous/next
+  book buttons (one-chapter books are under a pixel wide); "Zoom in" (shown below 720px, on coarse pointers, and
+  while zoomed) switches to the ~4,780px sideways-scrolling chart that gives every chapter 4px, `&zoom=1`, where taps
+  pick chapters; canvases cap their pixel ratio at `MAX_CANVAS_PX` per canvas so that chart stays light),
   `books.js` (chord diagram: ribbons on the same three stacked canvases with `isPointInPath` hit testing,
   book arcs and labels in an SVG overlay, 11px on phones and 12px otherwise; labels never leave their section's span,
   and crowded runs collapse into one group label like "Minor Prophets" or "3 books", which selects the whole run
@@ -127,6 +135,10 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   self-links on/off. `graph-labels.spec.js` checks that no verse-graph label touches an edge, arrowhead, node or
   other label, for 11 verses at 6 widths in both themes ("John 10:28" in John 3:16, "Rom 5:10" in Rom 5:6 and
   "1 Tim 1:15" in Luke 19:10 must stay visible). Both have a negative control that must be flagged.
+  `regressions.spec.js` holds a test per code-review finding (numbered as in the review); `build-data.spec.js`
+  builds from a copy of `data-raw/` (`DATA_RAW`, `DATA_OUT`, `DATA_MAX_BYTES` overrides, for tests only) and checks
+  that a bad row or an oversized file fails the build. Tests that break a fetch on purpose allow its console error
+  with `test.use({ allowedErrors: [/Failed to load resource/] })`.
 - Canvas performance: never stroke per-arc with `multiply` (Chrome re-reads the canvas per stroke,
   ~100x slower). If a blend mode is ever needed, accumulate on a transparent offscreen canvas and blend that once.
 
@@ -150,7 +162,9 @@ Follow this for every new view (`src/views/arcs.js` is the reference implementat
 6. **Cleanup**: window and document listeners, observers and timers must remove themselves
    once the view's elements are disconnected (see `onTheme` and the `ResizeObserver` in `arcs.js`).
 7. **Shareable state**: keep filters in the hash query (`#/arcs?min=30&book=Isa`), written with
-   `history.replaceState` (no `hashchange`, so no re-render), omitting defaults, and restored on load.
+   `history.replaceState` (no `hashchange`, so no re-render), omitting defaults, and restored on load. Never write
+   once the hash is another view's: removing a focused chart fires its `blur` as the next view renders, so blur
+   handlers check `isConnected` and `writeQuery` checks the hash (see `arcs.js`).
    Ignore invalid values rather than erroring.
 8. **Canvas** (more than ~2,000 marks): scale by `devicePixelRatio` (capped at 2), read colours from
    tokens and redraw on `themechange`, and draw expensive layers only when data, size or theme change.
@@ -202,7 +216,8 @@ Files in `public/data/`:
   in `style.css` from the theme tokens. Arcs whose ends share a 4-unit bin are merged and drawn more opaque; only the
   ribbons carrying 90% of the votes are drawn.
 
-Cleanup rules in the build script:
+Cleanup rules in the build script (it exits with an error, so nothing deploys, on any file over 5 MB, any
+cross-reference row it can't parse, or a `MARGIN_NOTES` entry that stops matching):
 
 - `3John.1.15` (not in KJV versification) is mapped to `3John.1.14`.
 - Negative-vote links are dropped; zero-vote links are kept (the UI fades them).

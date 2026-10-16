@@ -38,9 +38,12 @@ function place(anchor) {
   popover.style.top = `${Math.max(8, top) + window.scrollY}px`;
 }
 
-function trim(text) {
-  if (text.length <= PREVIEW_CHARS) return text;
-  return text.slice(0, text.lastIndexOf(' ', PREVIEW_CHARS)) + ' …';
+// Shortens text to at most `max` characters at a word break, marked with an ellipsis
+// (or at `max` itself if there is no space to break at).
+export function trim(text, max = PREVIEW_CHARS) {
+  if (text.length <= max) return text;
+  const space = text.lastIndexOf(' ', max);
+  return text.slice(0, space > 0 ? space : max) + ' …';
 }
 
 // `text` is a string or element (shown as is, in the interface font) or a promise of verse text.

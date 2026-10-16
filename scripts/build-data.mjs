@@ -7,9 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { writeThumbs, ARCS_MIN_VOTES } from './build-thumbs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const RAW = path.join(ROOT, 'data-raw');
-const OUT = path.join(ROOT, 'public', 'data');
-const MAX_BYTES = 5 * 1024 * 1024;
+// The overrides are for tests/build-data.spec.js, which builds from a broken copy of the sources.
+const RAW = process.env.DATA_RAW ?? path.join(ROOT, 'data-raw');
+const OUT = process.env.DATA_OUT ?? path.join(ROOT, 'public', 'data');
+const MAX_BYTES = Number(process.env.DATA_MAX_BYTES) || 5 * 1024 * 1024;
 const OVERVIEW_MIN_VOTES = 10;
 
 // ---------------------------------------------------------------------------
@@ -341,9 +342,21 @@ console.log(`\n${'File'.padEnd(26)}${'Size'.padStart(12)}${'Gzipped'.padStart(13
 let total = 0, totalGz = 0, oversize = 0;
 for (const f of files) {
   total += f.size; totalGz += f.gz;
-  const flag = f.size > MAX_BYTES ? '  <-- OVER 5 MB' : '';
+  const flag = f.size > MAX_BYTES ? `  <-- OVER ${(MAX_BYTES / 1024 / 1024).toFixed(0)} MB` : '';
   if (flag) oversize++;
   console.log(`${f.rel.padEnd(26)}${kb(f.size)}${kb(f.gz)}${flag}`);
 }
 console.log(`${`TOTAL (${files.length} files)`.padEnd(26)}${kb(total)}${kb(totalGz)}`);
-console.log(oversize ? `\n${oversize} file(s) over 5 MB` : '\nNo files over 5 MB');
+console.log(oversize ? `\n${oversize} file(s) over the size limit` : '\nNo files over 5 MB');
+
+// The table above is printed first so the cause is visible; then the build fails, so
+// a deploy can't publish oversized files or data with dropped rows. (Remapped refs
+// such as 3John.1.15 are counted above and are not failures.)
+const fatal = [
+  ...(failed.length ? [`${failed.length} cross-reference row(s) failed to parse (listed above)`] : []),
+  ...(oversize ? [`${oversize} file(s) over ${(MAX_BYTES / 1024 / 1024).toFixed(0)} MB: split the data or make it smaller`] : []),
+];
+if (fatal.length) {
+  console.error('\nBuild failed:\n  ' + fatal.join('\n  '));
+  process.exit(1);
+}

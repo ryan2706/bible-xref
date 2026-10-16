@@ -13,7 +13,8 @@ const WELCOME_KEY = 'welcome-dismissed';
 const STARTERS = ['Gen.1.1', 'Ps.23.1', 'Isa.53.5', 'John.1.1'];
 
 export async function renderVerse(container, [ref]) {
-  const titleName = h('span', {}, ref.replaceAll('.', ' '));
+  // The reference is shown once books.json is in, formatted by refs.js.
+  const titleName = h('span', {}, 'Loading…');
   const kjv = kjvMark();
   const { header, title } = viewHeader(
     [titleName, ' ', kjv],
@@ -34,49 +35,87 @@ export async function renderVerse(container, [ref]) {
   const graph = h('section', { class: 'graph-section', 'aria-labelledby': 'graph-title' });
   container.replaceChildren(...welcomeBand(title), header, h('div', { class: 'verse-layout' }, reading, margin, graph));
 
+  let books;
   try {
-    const books = await loadBooks();
-    if (!title.isConnected) return; // the user navigated away while loading
-    const index = getIndex(books);
-    const id = index.parseOsis(ref);
-    if (id === null) {
-      titleName.textContent = 'Verse not found';
-      title.replaceChildren(titleName);
-      document.title = 'Verse not found · Bible Cross-Reference Explorer';
-      textBox.replaceChildren(
-        h('p', {}, `No verse matches “${ref}”. Use a reference like `, h('a', { href: '#/verse/John.3.16' }, 'John.3.16'), '.'),
-      );
-      margin.remove();
-      graph.remove();
-      header.querySelector('.view-intro').remove();
-      header.querySelector('.how-to').remove();
-      return;
-    }
-    const verse = { ...index.locate(id), id };
-    const name = index.label(id);
-    titleName.textContent = name;
-    document.title = `${name} · Bible Cross-Reference Explorer`;
-    graph.replaceChildren(h('h2', { id: 'graph-title' }, 'Connections'), h('p', { class: 'status' }, 'Loading connections…'));
-    reading.append(verseNav(verse, index, title));
-
-    // Verse text and cross-references load in parallel; each fills in when ready.
-    const textLoad = loadVerses(verse.book.abbr).then(({ firstId, text }) => {
-      if (!title.isConnected) return;
-      textBox.replaceChildren(h('p', { class: 'verse-text is-selected' }, text[verse.id - firstId]));
-    });
-    const xrefLoad = loadXrefs(verse.book.abbr).then((xrefs) => {
-      if (!title.isConnected) return;
-      const { out, in: incoming } = xrefs.verses[verse.id - xrefs.firstId];
-      renderMargin(margin, out, incoming, index);
-      return renderGraphSection(graph, verse.id, out, incoming, index);
-    });
-    await Promise.all([textLoad, xrefLoad]);
+    books = await loadBooks();
   } catch {
     if (!title.isConnected) return;
-    textBox.replaceChildren(h('p', {}, 'Couldn’t load the verse data. Check your connection and reload the page.'));
+    titleName.textContent = 'Couldn’t load this verse';
+    title.replaceChildren(titleName);
+    textBox.replaceChildren(loadError('Couldn’t load the verse data.', () => renderVerse(container, [ref])));
     margin.remove();
     graph.remove();
+    return;
   }
+  if (!title.isConnected) return; // the user navigated away while loading
+  const index = getIndex(books);
+  const id = index.parseOsis(ref);
+  if (id === null) {
+    titleName.textContent = 'Verse not found';
+    title.replaceChildren(titleName);
+    document.title = 'Verse not found · Bible Cross-Reference Explorer';
+    textBox.replaceChildren(
+      h('p', {}, `No verse matches “${ref}”. Use a reference like `, h('a', { href: '#/verse/John.3.16' }, 'John.3.16'), '.'),
+    );
+    margin.remove();
+    graph.remove();
+    header.querySelector('.view-intro').remove();
+    header.querySelector('.how-to').remove();
+    return;
+  }
+  const verse = { ...index.locate(id), id };
+  const name = index.label(id);
+  titleName.textContent = name;
+  document.title = `${name} · Bible Cross-Reference Explorer`;
+  graph.replaceChildren(h('h2', { id: 'graph-title' }, 'Connections'), h('p', { class: 'status' }, 'Loading connections…'));
+  reading.append(verseNav(verse, index, title));
+
+  // Verse text and cross-references load in parallel and independently: each fills
+  // in when ready, and if one fails, the other stays and the failed one can be retried.
+  const showText = async () => {
+    let verses;
+    try {
+      verses = await loadVerses(verse.book.abbr);
+    } catch {
+      if (title.isConnected) textBox.replaceChildren(loadError('Couldn’t load the verse text.', showText));
+      return;
+    }
+    if (!title.isConnected) return;
+    textBox.replaceChildren(h('p', { class: 'verse-text is-selected' }, verses.text[verse.id - verses.firstId]));
+  };
+  const showRefs = async () => {
+    let xrefs;
+    try {
+      xrefs = await loadXrefs(verse.book.abbr);
+    } catch {
+      if (!title.isConnected) return;
+      margin.removeAttribute('aria-busy');
+      margin.replaceChildren(loadError('Couldn’t load the cross-references.', () => {
+        margin.setAttribute('aria-busy', 'true');
+        graph.hidden = false;
+        graph.replaceChildren(h('h2', { id: 'graph-title' }, 'Connections'), h('p', { class: 'status' }, 'Loading connections…'));
+        return showRefs();
+      }));
+      graph.hidden = true; // drawn from the same data
+      return;
+    }
+    if (!title.isConnected) return;
+    const { out, in: incoming } = xrefs.verses[verse.id - xrefs.firstId];
+    renderMargin(margin, out, incoming, index);
+    return renderGraphSection(graph, verse.id, out, incoming, index);
+  };
+  await Promise.all([showText(), showRefs()]);
+}
+
+// A failed load in one part of the view: what failed, and a button to try that part again.
+function loadError(message, retry) {
+  const button = h('button', { type: 'button', class: 'retry' }, 'Retry');
+  const box = h('p', { class: 'load-error', role: 'alert' }, `${message} Check your connection and try again. `, button);
+  button.addEventListener('click', () => {
+    box.replaceWith(h('p', { class: 'status' }, 'Loading…'));
+    retry();
+  });
+  return box;
 }
 
 function renderMargin(margin, out, incoming, index) {
@@ -96,6 +135,9 @@ function welcomeBand(title) {
     if (localStorage.getItem(WELCOME_KEY)) return [];
   } catch {}
   const dismiss = h('button', { type: 'button', class: 'welcome-dismiss' }, 'Dismiss');
+  // Filled in once books.json is in (it usually already is), so refs.js names them.
+  const startLabel = h('p', { class: 'welcome-label', id: 'welcome-starts-label' }, 'Start with a verse');
+  const starts = h('ul', { 'aria-labelledby': 'welcome-starts-label' });
   const band = h(
     'section',
     { class: 'welcome', 'aria-label': 'Welcome' },
@@ -112,12 +154,8 @@ function welcomeBand(title) {
     h(
       'div',
       { class: 'welcome-starts' },
-      h('p', { class: 'welcome-label', id: 'welcome-starts-label' }, 'Start with a verse'),
-      h(
-        'ul',
-        { 'aria-labelledby': 'welcome-starts-label' },
-        ...STARTERS.map((osis) => h('li', {}, h('a', { href: `#/verse/${osis}`, 'data-osis': osis }, osis.replace(/\.(\d+)\.(\d+)$/, ' $1:$2')))),
-      ),
+      startLabel,
+      starts,
       h('p', { class: 'welcome-label', id: 'welcome-whole-label' }, 'Or see the whole Bible'),
       h(
         'ul',
@@ -135,11 +173,16 @@ function welcomeBand(title) {
     band.remove();
     title.focus();
   });
-  // Full book names for the starting verses once books.json is in (it usually already is).
-  loadBooks().then((books) => {
-    const index = getIndex(books);
-    for (const a of band.querySelectorAll('[data-osis]')) a.textContent = index.label(index.parseOsis(a.dataset.osis));
-  }).catch(() => {});
+  loadBooks().then(
+    (books) => {
+      const index = getIndex(books);
+      starts.append(...STARTERS.map((osis) => h('li', {}, h('a', { href: `#/verse/${osis}` }, index.label(index.parseOsis(osis))))));
+    },
+    () => {
+      startLabel.remove();
+      starts.remove();
+    },
+  );
   return [band];
 }
 

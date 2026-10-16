@@ -4,6 +4,7 @@
 // need no redraw.
 import { scaleSqrt } from 'd3';
 import { attachPreview } from '../preview.js';
+import { votesText } from '../votes.js';
 import { strongestLinks } from '../links.js';
 import { radialLayout, edgeCurve, SPAN, SPLIT } from '../graph-layout.js';
 
@@ -41,7 +42,7 @@ function buildGraph(centerId, out, incoming, index) {
 function describe(node, index) {
   const how =
     node.dirs.size === 2 ? 'cites and is cited by this verse' : node.dirs.has('out') ? 'cited by this verse' : 'cites this verse';
-  return `${index.label(node.id)}, ${how}, ${node.votes} votes`;
+  return `${index.label(node.id)}, ${how}, ${votesText(node.votes)}`;
 }
 
 // An edge between the centre and a node, trimmed to the circles' edges. Two edges

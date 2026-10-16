@@ -1035,7 +1035,18 @@ main > * {
   color: var(--ink-muted);
 }
 
-.show-all {
+/* A part of the Verse view that failed to load, with a button (on its own line) to try again. */
+.load-error {
+  font-family: var(--font-ui);
+  font-size: var(--step--1);
+}
+
+.load-error .retry {
+  display: block;
+}
+
+.show-all,
+.retry {
   font: inherit;
   color: var(--link);
   background: none;

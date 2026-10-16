@@ -17,12 +17,15 @@ import { legend as makeLegend } from '../legend.js';
 const DEFAULT_VOTES = 50;
 const MAX_VOTES = 500;
 const VOTES_STEP = 5;
-const NARROW = 720; // below this the chart keeps a fixed width and scrolls sideways
-const SCROLL_WIDTH = 1700;
+const NARROW = 720; // below this the chapter is described inline, under the controls
+// A chapter narrower than this can't be picked by a tap: taps on the fitted chart select
+// a whole book instead, and zooming in widens the chart to give each chapter this much.
+const MIN_TAP = 4;
 const PAD_X = 6;
 const TESTAMENT_GAP = 10;
 const BAR_MAX = 32; // px for the longest chapter (Psalm 119)
 const MAX_DPR = 2; // caps canvas memory on phones
+const MAX_CANVAS_PX = 4e6; // and so does this, per canvas, for the wide zoomed-in chart
 const MIN_ARC_H = 9; // px, so links between neighbouring chapters clear the axis marker
 const NOTES_KEY = 'arcs-notes-hidden';
 
@@ -64,6 +67,8 @@ function writeQuery(min, book, zoom, chapter) {
   if (zoom) params.set('zoom', '1');
   if (chapter) params.set('ch', `${chapter.book.abbr}.${chapter.chapter}`);
   const query = params.toString();
+  // Never over another view's URL (e.g. a late event as this view is being replaced).
+  if (!location.hash.startsWith('#/arcs')) return;
   // replaceState doesn't fire hashchange, so the view isn't rebuilt.
   history.replaceState(null, '', query ? `#/arcs?${query}` : '#/arcs');
 }
@@ -187,11 +192,12 @@ function buildChart(figure, hint, index, overview, initial) {
   let ignoreScroll = false; // the next scroll event is ours (centring a chapter), not the user's
   let inline = false; // the selected chapter is described in chapterLine, not the popover
   let lastPointer = 'mouse';
-  let zoom = initial.zoom; // phones: the wide, scrolling chart instead of the fitted one
+  let zoom = initial.zoom; // touch screens: the wide, scrolling chart instead of the fitted one
   let notes = []; // see buildNotes
   let note = -1; // the note whose arcs are highlighted
   let notePinned = false; // by a click, tap or the keyboard rather than hover
-  let tapped = null; // fitted phone chart: the book a tap selected (chapters are too thin to tap)
+  let tapped = null; // fitted chart: the book a tap selected (chapters are too thin to tap)
+  const coarse = () => matchMedia('(pointer: coarse)').matches;
 
   function passes() {
     const lo = book?.firstChapter ?? 0;
@@ -226,8 +232,8 @@ function buildChart(figure, hint, index, overview, initial) {
 
   function layout() {
     const narrow = scroller.clientWidth < NARROW;
-    const scrolls = narrow && zoom;
-    const W = scrolls ? SCROLL_WIDTH : scroller.clientWidth;
+    const scrolls = zoom;
+    const W = scrolls ? Math.ceil(2 * PAD_X + TESTAMENT_GAP + N * MIN_TAP) : scroller.clientWidth;
     const step = (W - 2 * PAD_X - TESTAMENT_GAP) / N;
     const x = (c) => PAD_X + (c + 0.5) * step + (c >= ntStart ? TESTAMENT_GAP : 0);
     const arcH = Math.round(Math.min(380, Math.max(scrolls ? 200 : 150, W * 0.33)));
@@ -360,7 +366,7 @@ function buildChart(figure, hint, index, overview, initial) {
   const labelFont = (weight = 400) => `${weight} 12px ${themeColor('--font-ui')}`;
 
   function sizeCanvas(canvas) {
-    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR, Math.sqrt(MAX_CANVAS_PX / (L.W * L.H)));
     canvas.width = Math.round(L.W * dpr);
     canvas.height = Math.round(L.H * dpr);
     canvas.style.width = `${L.W}px`;
@@ -671,9 +677,10 @@ function buildChart(figure, hint, index, overview, initial) {
     renderNotes();
   });
 
-  // --- Zoom (phones) ----------------------------------------------------------------------
+  // --- Zoom (touch screens) ----------------------------------------------------------------
+  // Offered wherever taps are likely; kept while zoomed in (e.g. from a shared link) to zoom out.
   function updateZoom() {
-    zoomButton.hidden = !L.narrow;
+    zoomButton.hidden = !(L.narrow || coarse() || zoom);
     zoomButton.textContent = zoom ? 'Show the whole Bible' : 'Zoom in';
   }
 
@@ -694,9 +701,10 @@ function buildChart(figure, hint, index, overview, initial) {
     live.textContent = zoom ? 'Zoomed in. Scroll sideways to move through the chapters.' : 'Showing the whole Bible.';
   });
 
-  // --- Books (fitted phone chart) ------------------------------------------------------
-  // Each chapter is about 0.3px wide there, so a tap selects the whole book, described
-  // in the inline line with a button that zooms in to it, where taps pick chapters.
+  // --- Books (fitted chart, touch) -----------------------------------------------------
+  // Chapters are under MIN_TAP wide there (about 0.3px on phones, 0.8px on tablets), so a
+  // tap selects the whole book, described in the inline line with a button that zooms in
+  // to it, where taps pick chapters.
   function bookLinks(b) {
     const links = new Set();
     for (let c = b.firstChapter; c < b.firstChapter + b.chapters; c++) for (const l of byChapter[c]) links.add(l);
@@ -821,7 +829,7 @@ function buildChart(figure, hint, index, overview, initial) {
   // tap selects it and a second tap on the same chapter opens it.
   stack.addEventListener('click', (e) => {
     const c = chapterAtX(e.clientX - stack.getBoundingClientRect().left);
-    if (lastPointer === 'touch' && L.narrow && !L.scrolls) return selectBook(chapters[c].book);
+    if (lastPointer === 'touch' && L.step < MIN_TAP) return selectBook(chapters[c].book);
     // With a note's arcs showing, the first click switches to the chapter's arcs.
     if (notePinned) return select(c, { pin: lastPointer === 'touch' });
     if (lastPointer === 'touch' && !(pinned && c === hovered)) select(c, { pin: true });
@@ -847,7 +855,8 @@ function buildChart(figure, hint, index, overview, initial) {
   });
   // (Zooming keeps the chapter, so focus moving to the zoom button doesn't clear it,
   // and a tapped book stays until a tap elsewhere.)
-  scroller.addEventListener('blur', (e) => e.relatedTarget !== zoomButton && !tapped && select(-1));
+  // (Opening a chapter removes the focused chart, which also blurs it: nothing to clear then.)
+  scroller.addEventListener('blur', (e) => scroller.isConnected && e.relatedTarget !== zoomButton && !tapped && select(-1));
   scroller.addEventListener('keydown', (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     let c = Math.max(hovered, 0);
@@ -947,9 +956,12 @@ function buildChart(figure, hint, index, overview, initial) {
     resizeTimer = setTimeout(() => {
       if (!stack.isConnected) return observer.disconnect(); // navigated away meanwhile
       const narrow = scroller.clientWidth < NARROW;
-      // The zoomed-in chart has a fixed width; the others follow the page.
-      if (narrow && zoom && L.scrolls) return;
-      if (!(narrow && zoom) && !L.scrolls && narrow === L.narrow && Math.abs(scroller.clientWidth - L.W) < 2) return;
+      if (narrow !== L.narrow) {
+        select(-1);
+        return relayout();
+      }
+      // The zoomed-in chart has a fixed width; the fitted one follows the page.
+      if (L.scrolls || Math.abs(scroller.clientWidth - L.W) < 2) return;
       select(-1);
       relayout();
     }, 150);
@@ -964,9 +976,9 @@ function buildChart(figure, hint, index, overview, initial) {
   }
 
   function updateHint() {
-    hint.textContent = !L.narrow
+    hint.textContent = !L.narrow && !coarse()
       ? 'Hover over a chapter to see its links, and click to read it.'
-      : L.scrolls
+      : L.step >= MIN_TAP
         ? 'Scroll sideways to move through the Bible. Tap a chapter to see its links, and tap it again to read it.'
         : 'Tap a book to see its links, then zoom in to it to pick single chapters.';
   }
