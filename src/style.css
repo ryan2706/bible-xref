@@ -1374,6 +1374,42 @@ main > * {
 
 
 
+/* Chapter numbers for a zoomed-in book too narrow to tap on the chart (see arcs.js). */
+.arcs-chips {
+  position: relative; /* the chips' offsetParent, for scrolling one into view */
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 2.75rem;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.125rem;
+}
+
+.arcs-chip {
+  flex: none;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  font: inherit;
+  font-family: var(--font-text);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+.arcs-chip:hover {
+  border-color: var(--ink-muted);
+}
+
+.arcs-chip[aria-pressed='true'] {
+  color: var(--paper);
+  background: var(--select);
+  border-color: var(--select);
+}
+
 /* Zooms in to a book and back out (see arcs.js). */
 .arcs-zoom {
   font: inherit;

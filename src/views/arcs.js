@@ -26,6 +26,9 @@ const MIN_TAP = 4;
 const FOCUS_MAX = 16;
 const FOCUS_SHARE = 0.8;
 const FOCUS_MS = 400;
+// Where a zoomed-in book's chapters are still narrower than this (Psalms, or Isaiah on a
+// phone), the focus line adds a row of chapter-number chips to pick them by.
+const CHIPS_BELOW = 8;
 const PAD_X = 6;
 const TESTAMENT_GAP = 10;
 const BAR_MAX = 32; // px for the longest chapter (Psalm 119)
@@ -204,6 +207,7 @@ function buildChart(figure, hint, index, overview, initial) {
   let focus = initial.focus; // the book zoomed in to, or null
   let animation = 0; // requestAnimationFrame id while the zoom animates
   let quietFocus = false; // focus moved to the chart by code, not the keyboard
+  let chips = []; // the focus line's chapter chips, by chapter of the zoomed-in book
   let notes = []; // see buildNotes
   let note = -1; // the note whose arcs are highlighted
   let notePinned = false; // by a click, tap or the keyboard rather than hover
@@ -795,8 +799,65 @@ function buildChart(figure, hint, index, overview, initial) {
       h('strong', {}, focus.name),
       `: zoomed in to its ${n === 1 ? 'one chapter' : `${n} chapters`}.`,
       h('span', { class: 'arcs-chapter-actions' }, out, ...stepButtons(focus, (next, d) => setFocus(next, { focusStep: d }))),
+      ...chipRow(),
     );
+    syncChips();
     refocus(focusLine, focusStep);
+  }
+
+  // The zoomed-in book's chapters are too narrow to tap reliably at this width.
+  const needsChips = () => !!focus && widthsFor(focus, scroller.clientWidth)[focus.firstChapter] < CHIPS_BELOW;
+
+  // A sideways-scrolling row of chapter numbers. A chip picks its chapter as a tap on the
+  // chart would; picking it again (tap, click or Enter) opens it. Arrow keys, Home and End
+  // move between chips, one tab stop for the row.
+  function chipRow() {
+    chips = [];
+    if (!needsChips()) return [];
+    const first = focus.firstChapter;
+    chips = Array.from({ length: focus.chapters }, (_, i) => {
+      const c = first + i;
+      const chip = h('button', { type: 'button', class: 'arcs-chip', tabindex: '-1', 'aria-label': index.chapterLabel(chapters[c]), 'aria-pressed': 'false' }, String(i + 1));
+      chip.addEventListener('pointerdown', (e) => (lastPointer = e.pointerType));
+      chip.addEventListener('click', (e) => {
+        if (e.detail === 0) lastPointer = 'keyboard'; // Enter or Space
+        if (pinned && hovered === c) return open(c);
+        select(c, { pin: true, announce: true });
+      });
+      return chip;
+    });
+    const row = h('div', { class: 'arcs-chips', role: 'group', 'aria-label': `Chapters of ${focus.name}` }, ...chips);
+    row.addEventListener('keydown', (e) => {
+      const i = chips.indexOf(document.activeElement);
+      if (i < 0) return;
+      const to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: chips.length - 1 }[e.key];
+      if (to === undefined || e.altKey || e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      const chip = chips[Math.max(0, Math.min(chips.length - 1, to))];
+      chips.forEach((b) => (b.tabIndex = b === chip ? 0 : -1));
+      chip.focus({ preventScroll: true });
+      revealChip(chip);
+    });
+    return [row];
+  }
+
+  // Marks the selected chapter's chip (also when it was picked on the chart) and keeps it in view.
+  function syncChips() {
+    if (!chips.length) return;
+    const i = pinned && hovered >= 0 ? hovered - focus.firstChapter : -1;
+    chips.forEach((chip, k) => chip.setAttribute('aria-pressed', String(k === i)));
+    const current = chips[i] ?? (chips.includes(document.activeElement) ? document.activeElement : chips[0]);
+    chips.forEach((chip) => (chip.tabIndex = chip === current ? 0 : -1));
+    if (chips[i]) revealChip(chips[i]);
+  }
+
+  // Scrolls the row (never the page) so the chip is fully visible, with a chip to spare.
+  function revealChip(chip) {
+    const row = chip.parentNode;
+    const margin = chip.offsetWidth;
+    const left = chip.offsetLeft; // the row is the chips' offsetParent
+    if (left - margin < row.scrollLeft) row.scrollLeft = left - margin;
+    else if (left + chip.offsetWidth + margin > row.scrollLeft + row.clientWidth) row.scrollLeft = left + chip.offsetWidth + margin - row.clientWidth;
   }
 
   // --- Books (touch) -----------------------------------------------------------------------
@@ -857,6 +918,7 @@ function buildChart(figure, hint, index, overview, initial) {
   // A pinned chapter is kept in the URL (&ch=Isa.53); hover isn't.
   function select(c, options = {}) {
     selectChapter(c, options);
+    syncChips();
     const ch = pinned && hovered >= 0 ? hovered : -1;
     if (ch === sharedCh) return;
     sharedCh = ch;
@@ -881,8 +943,8 @@ function buildChart(figure, hint, index, overview, initial) {
     const links = n === 0 ? 'No links' : `${n.toLocaleString('en')} ${n === 1 ? 'link' : 'links'}`;
     // How to open it depends on how the chapter was chosen: a tap, the keyboard, or a
     // mouse (or a link, which counts as the device's usual pointer).
-    const touch = pin && (lastPointer === 'touch' || (document.activeElement !== scroller && matchMedia('(hover: none)').matches));
-    const keyboard = document.activeElement === scroller;
+    const keyboard = document.activeElement === scroller || lastPointer === 'keyboard';
+    const touch = pin && !keyboard && (lastPointer === 'touch' || matchMedia('(hover: none)').matches);
     const action = touch ? 'Tap again to read it.' : keyboard ? 'Press Enter to read it.' : 'Click to read it.';
     const message = `${links} at ${minVotes}+ votes${book ? ` touching ${book.name}` : ''}. ${action}`;
     // The popover anchors to a full-height marker, so it opens above or below the
@@ -943,9 +1005,10 @@ function buildChart(figure, hint, index, overview, initial) {
     // Only for keyboard focus; a click also focuses the scroller.
     if (hovered < 0 && !quietFocus && scroller.matches(':focus-visible')) select(book?.firstChapter ?? 0, { pin: true, announce: true });
   });
-  // (A tapped book stays until a tap elsewhere.)
+  // (A tapped book stays until a tap elsewhere, and a chapter while focus moves to the
+  // focus line, whose chips pick it again to open it.)
   // (Opening a chapter removes the focused chart, which also blurs it: nothing to clear then.)
-  scroller.addEventListener('blur', () => scroller.isConnected && !tapped && select(-1));
+  scroller.addEventListener('blur', (e) => scroller.isConnected && !tapped && !focusLine.contains(e.relatedTarget) && select(-1));
   scroller.addEventListener('keydown', (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     let c = Math.max(hovered, 0);
@@ -1049,6 +1112,7 @@ function buildChart(figure, hint, index, overview, initial) {
   });
 
   function relayout() {
+    if (needsChips() !== chips.length > 0) renderFocusLine(); // the width crossed CHIPS_BELOW
     L = layout();
     drawAll();
     placeMarkers();

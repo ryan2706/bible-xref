@@ -116,7 +116,10 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   links zoom to the `&ch=` chapter's book); the change animates over `FOCUS_MS`, redrawing only the colour layer per
   frame, and jumps under reduced motion; the focus line (`.arcs-focus`) names the book, "Show the whole Bible" and
   previous/next buttons that move the zoom; taps inside the zoomed book always pick chapters, however narrow (Psalms
-  gets ~1.8px at 390px), taps elsewhere pick books; notes are hidden while zoomed),
+  gets ~1.8px at 390px), taps elsewhere pick books; where the zoomed book's chapters are under `CHIPS_BELOW` (8px),
+  the focus line adds a sideways-scrolling row of 44px chapter chips (`.arcs-chips`, one tab stop, arrow keys/Home/End
+  move between them) that pick a chapter as a chart tap does and open it when picked again, kept in sync with chart
+  taps and scrolled to keep the selected chip in view; notes are hidden while zoomed),
   `books.js` (chord diagram: ribbons on the same three stacked canvases with `isPointInPath` hit testing,
   book arcs and labels in an SVG overlay, 11px on phones and 12px otherwise; labels never leave their section's span,
   and crowded runs collapse into one group label like "Minor Prophets" or "3 books", which selects the whole run
@@ -140,7 +143,7 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   other label, for 11 verses at 6 widths in both themes ("John 10:28" in John 3:16, "Rom 5:10" in Rom 5:6 and
   "1 Tim 1:15" in Luke 19:10 must stay visible). Both have a negative control that must be flagged.
   `arcs-zoom.spec.js` covers the Arcs zoom at 390, 768 and 1024px with touch (Psalms, Jude, previous/next,
-  the keyboard, the animation and reduced motion), placing taps with `chapterPoint()` from `arcs-helpers.js`, which
+  the keyboard, the animation and reduced motion) and the chapter chips (Psalms and Isaiah at 390px, Psalms at 768px), placing taps with `chapterPoint()` from `arcs-helpers.js`, which
   mirrors the chart's geometry (update it if `PAD_X`, `TESTAMENT_GAP` or the focus constants change).
   `regressions.spec.js` holds a test per code-review finding (numbered as in the review); `build-data.spec.js`
   builds from a copy of `data-raw/` (`DATA_RAW`, `DATA_OUT`, `DATA_MAX_BYTES` overrides, for tests only) and checks

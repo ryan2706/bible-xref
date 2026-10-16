@@ -120,3 +120,80 @@ test.describe('the zoom animates', () => {
     expect(settled).toBe(1);
   });
 });
+
+test.describe('chapter chips for long books', () => {
+  test.use({ hasTouch: true });
+  const chipsOf = (page) => page.locator('.arcs-focus .arcs-chips');
+  // Whether a chip lies wholly inside its scrolling row.
+  const inView = (chip) =>
+    chip.evaluate((el) => {
+      const r = el.getBoundingClientRect(), row = el.parentNode.getBoundingClientRect();
+      return r.left >= row.left - 0.5 && r.right <= row.right + 0.5;
+    });
+
+  for (const [width, abbr, name, label, chapter] of [
+    [390, 'Ps', 'Psalms', 'Psalm', 119],
+    [390, 'Isa', 'Isaiah', 'Isaiah', 53],
+    [768, 'Ps', 'Psalms', 'Psalm', 119],
+  ]) {
+    test(`${name} at ${width}px: a chip picks a chapter as a chart tap would`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`#/arcs?zoom=${abbr}`);
+      const p = await chapterPoint(page, `${abbr}.1`, abbr);
+      expect(p.width).toBeLessThan(8);
+      const row = chipsOf(page);
+      await expect(row.getByRole('button')).toHaveCount((await page.locator('.arcs-focus strong').textContent()) === 'Psalms' ? 150 : 66);
+      const chip = row.getByRole('button', { name: `${label} ${chapter}`, exact: true });
+      const box = await chip.boundingBox();
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+
+      await chip.scrollIntoViewIfNeeded();
+      await chip.tap();
+      await expect(chip).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('#verse-preview strong')).toHaveText(`${label} ${chapter}`);
+      await expect(page.locator('#verse-preview')).toContainText('Tap again to read it.');
+      await expect(page.locator('canvas.arcs-dim')).toBeVisible(); // the other arcs dimmed
+      await expect.poll(() => hash(page)).toBe(`#/arcs?zoom=${abbr}&ch=${abbr}.${chapter}`);
+
+      // A chart tap on another chapter moves the chip selection and scrolls it into view.
+      const q = await chapterPoint(page, `${abbr}.2`, abbr);
+      await page.touchscreen.tap(q.x, q.y);
+      const second = row.getByRole('button', { name: `${label} 2`, exact: true });
+      await expect(second).toHaveAttribute('aria-pressed', 'true');
+      await expect(chip).toHaveAttribute('aria-pressed', 'false');
+      await expect.poll(() => inView(second)).toBe(true);
+
+      await second.tap();
+      await expect.poll(() => hash(page)).toBe(`#/verse/${abbr}.2.1`);
+    });
+  }
+
+  test('books whose chapters are 8px or wider have no chips', async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto('#/arcs?zoom=Gen'); // ~11px a chapter
+    await expect(page.locator('.arcs-focus strong')).toHaveText('Genesis');
+    await expect(chipsOf(page)).toHaveCount(0);
+  });
+
+  test('arrow keys move between chips and Enter picks, then opens', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto('#/arcs?zoom=Ps');
+    const row = chipsOf(page);
+    await row.getByRole('button', { name: 'Psalm 1', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator(':focus')).toHaveAccessibleName('Psalm 3');
+    await page.keyboard.press('End');
+    await expect(page.locator(':focus')).toHaveAccessibleName('Psalm 150');
+    await expect.poll(() => inView(page.locator(':focus'))).toBe(true);
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#verse-preview strong')).toHaveText('Psalm 149');
+    await expect(page.locator('#verse-preview')).toContainText('Press Enter to read it.');
+    // One tab stop for the row: the selected chip.
+    expect(await row.locator('[tabindex="0"]').count()).toBe(1);
+    await page.keyboard.press('Enter');
+    await expect.poll(() => hash(page)).toBe('#/verse/Ps.149.1');
+  });
+});
