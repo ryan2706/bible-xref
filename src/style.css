@@ -326,15 +326,23 @@ main > * {
 }
 
 .site-footer {
-  padding: 1.25rem var(--page-pad);
+  padding: 0.75rem var(--page-pad);
   border-top: 1px solid var(--rule);
   color: var(--ink-muted);
   font-size: var(--step--1);
 }
 
+/* One line: the data credit and a link to About. If a very narrow screen can't fit
+   it, it breaks between the two rather than inside the credit. */
 .site-footer p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
   margin: 0;
-  max-width: 60rem;
+}
+
+.site-footer p > * {
+  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------------------
@@ -351,7 +359,189 @@ main > * {
 .view-intro {
   color: var(--ink-muted);
   max-width: var(--measure);
-  margin: 0 0 2rem;
+  margin: 0;
+}
+
+/* The top of every view (view-header.js): title, one-line intro, and a collapsible
+   "How to read this" in the same place, the same distance above the content. */
+.view-header {
+  margin-bottom: 1.75rem;
+}
+
+.view-header .view-title {
+  margin-bottom: 0.5rem;
+}
+
+.how-to {
+  max-width: var(--measure);
+  margin-top: 0.5rem;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+.how-to summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.how-to summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A chevron that turns as the guide opens. */
+.how-to summary::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-0.1rem) rotate(-45deg);
+  transition: transform 0.15s;
+}
+
+.how-to[open] summary::before {
+  transform: translateY(-0.2rem) rotate(45deg);
+}
+
+.how-to summary:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.how-to-body {
+  border-left: 1px solid var(--rule);
+  padding: 0.1rem 0 0.1rem 1rem;
+  margin: 0.25rem 0 0 0.2rem;
+}
+
+.how-to-body p {
+  margin: 0 0 0.6rem;
+  line-height: 1.5;
+}
+
+.how-to-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Chart controls (controls.js), the same on every view: a label row over a control
+   row. Label rows share a height and the bar aligns items to the bottom, so labels
+   line up on one baseline and controls on another, "?" button or not. */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem 2rem;
+  margin: 0 0 1.25rem;
+  font-size: var(--step--1);
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.control-label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.5rem;
+  color: var(--ink-muted);
+}
+
+.control-body,
+.control-status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.25rem;
+  margin: 0;
+}
+
+.control-status {
+  font-variant-numeric: tabular-nums;
+}
+
+.control input[type='range'] {
+  width: min(16rem, 60vw);
+  margin: 0;
+  accent-color: var(--ink-muted);
+}
+
+.control output {
+  min-width: 3.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+.control select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  min-height: 2.25rem;
+}
+
+/* On/off switch. Ink, not vermilion: vermilion means selection. */
+.toggle {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 2.5rem;
+  height: 1.4rem;
+  margin: 0;
+  border: 1px solid var(--ink-muted);
+  border-radius: 999px;
+  background: var(--paper);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.toggle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0.2rem;
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  transform: translateY(-50%);
+  transition: transform 0.15s, background-color 0.15s;
+}
+
+.toggle:checked {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.toggle:checked::before {
+  background: var(--paper);
+  transform: translate(1.05rem, -50%);
+}
+
+.toggle:focus-visible {
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.toggle-state {
+  min-width: 1.75em;
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle,
+  .toggle::before,
+  .how-to summary::before {
+    transition: none;
+  }
 }
 
 .status {
@@ -591,15 +781,9 @@ main > * {
   border-style: dashed;
 }
 
-.verse-chapter-link,
-.verse-keys {
+.verse-chapter-link {
   margin: 0;
   font-size: var(--step--1);
-}
-
-.verse-keys {
-  flex-basis: 100%;
-  color: var(--ink-muted);
 }
 
 /* No arrow keys to speak of on touch screens. */
@@ -880,6 +1064,28 @@ main > * {
   margin-bottom: 0.25rem;
 }
 
+/* "KJV" beside a verse reference (version.js): small caps in the text face, quiet
+   until hovered. */
+.kjv {
+  font-family: var(--font-text);
+  font-weight: 400;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.kjv:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.view-title .kjv {
+  font-size: 0.6em;
+  margin-left: 0.1em;
+}
+
 .preview-text {
   display: block;
   font-family: var(--font-text);
@@ -897,12 +1103,6 @@ main > * {
   margin: 1.5rem 0 0.25rem;
 }
 
-.graph-note {
-  color: var(--ink-muted);
-  font-size: var(--step--1);
-  max-width: var(--measure);
-  margin: 0 0 0.5rem;
-}
 
 .graph {
   display: block;
@@ -1007,19 +1207,28 @@ main > * {
   font-weight: 700;
 }
 
+/* Chart legends (legend.js), the same on every view and at every width: a
+   wrapping row of swatch and text, right under the chart. */
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
+  gap: 0.4rem 1.25rem;
   list-style: none;
   padding: 0;
-  margin: 0.5rem 0 0;
+  margin: 0.75rem 0 0;
   font-size: var(--step--1);
   color: var(--ink-muted);
 }
 
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+}
+
 .swatch {
   display: inline-block;
+  flex: none;
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 50%;
@@ -1039,10 +1248,6 @@ main > * {
   background: var(--select);
 }
 
-.graph-section .legend li {
-  display: inline-flex;
-  align-items: center;
-}
 
 .swatch-edge {
   margin-right: 0.4rem;
@@ -1078,60 +1283,13 @@ main > * {
   margin-inline: var(--gutter);
 }
 
-.arcs-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 1rem 2rem;
-  margin-bottom: 1.25rem;
-  font-size: var(--step--1);
-}
 
-.arcs-control {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
 
-.arcs-control label {
-  color: var(--ink-muted);
-}
 
-/* Label rows share a height so the two controls line up, "?" or not. */
-.arcs-control-head,
-.arcs-control > label {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-height: 1.5rem;
-}
 
-.arcs-slider {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-height: 2.25rem; /* as tall as the book menu, so the labels line up */
-}
 
-.arcs-slider input {
-  width: min(16rem, 60vw);
-  accent-color: var(--ink-muted);
-}
 
-.arcs-votes-value {
-  min-width: 3.5em;
-  font-variant-numeric: tabular-nums;
-}
 
-.arcs-control select {
-  font: inherit;
-  color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  padding: 0.35rem 0.5rem;
-  min-height: 2.25rem;
-}
 
 /* A chapter opened from a link, described inline on phones (see arcs.js). */
 .arcs-chapter {
@@ -1164,10 +1322,6 @@ main > * {
   font-size: var(--step-0);
 }
 
-.arcs-count {
-  margin: 0 0 0.35rem;
-  font-variant-numeric: tabular-nums;
-}
 
 /* The chart fits the page on wide screens and scrolls sideways on narrow ones. */
 .arcs-scroll {
@@ -1203,26 +1357,8 @@ main > * {
   pointer-events: none;
 }
 
-.arcs-hint {
-  color: var(--ink-muted);
-  font-size: var(--step--1);
-  margin: 0 0 0.75rem;
-}
 
-.arcs-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2.25rem;
-  cursor: pointer;
-}
 
-.arcs-check input {
-  width: 1.1rem;
-  height: 1.1rem;
-  margin: 0;
-  accent-color: var(--ink-muted);
-}
 
 /* Phones: switches between the fitted and the sideways-scrolling chart. */
 .arcs-zoom {
@@ -1272,15 +1408,16 @@ main > * {
   color: var(--ink);
 }
 
-/* Phones: the chart comes first, so the notes move under it. */
+/* Phones: the chart comes first, so the notes move under it, after the legend
+   (which stays right under the chart, as on every view). */
 @media (max-width: 720px) {
-  .arcs-notes {
+  .arcs-figure > .legend {
     order: 1;
-    margin: 0.75rem 0 0;
   }
 
-  .arcs-figure > .legend {
+  .arcs-notes {
     order: 2;
+    margin: 1rem 0 0;
   }
 }
 
@@ -1337,28 +1474,8 @@ main > * {
   background: linear-gradient(90deg, var(--arc-ot) 50%, var(--arc-nt) 50%);
 }
 
-/* ---------------------------------------------------------------------------
-   Chord diagram (Books)
-   --------------------------------------------------------------------------- */
-.books-controls {
-  margin-bottom: 1rem;
-  font-size: var(--step--1);
-}
 
-.books-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2.25rem;
-  cursor: pointer;
-}
 
-.books-toggle input {
-  width: 1.1rem;
-  height: 1.1rem;
-  margin: 0;
-  accent-color: var(--ink-muted);
-}
 
 /* Chart and details panel side by side on wide screens, stacked below that,
    and the panel becomes a bottom sheet on phones. */
@@ -1468,12 +1585,6 @@ main > * {
   visibility: visible;
 }
 
-.books-hint {
-  color: var(--ink-muted);
-  font-size: var(--step--1);
-  max-width: var(--measure);
-  margin: 0.5rem 0 0;
-}
 
 /* Previews of books and pairs */
 .preview-list {

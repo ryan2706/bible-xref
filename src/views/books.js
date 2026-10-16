@@ -10,9 +10,12 @@ import { arc as d3arc, ribbon as d3ribbon } from 'd3';
 import { h } from '../dom.js';
 import { loadBooks, loadBookMatrix, loadXrefs, getVerseText } from '../data.js';
 import { getIndex } from '../refs.js';
-import { themeColor, SECTIONS, sectionOf } from '../theme.js';
+import { themeColor, SECTIONS, sectionOf, GROUP_NAMES } from '../theme.js';
 import { showPreview, hidePreview } from '../preview.js';
 import { votesText, votesEl, votesHelp } from '../votes.js';
+import { viewHeader } from '../view-header.js';
+import { controlBar, control, toggleSwitch } from '../controls.js';
+import { legend as makeLegend } from '../legend.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const TAU = 2 * Math.PI;
@@ -31,21 +34,10 @@ const TEXT_CHARS = 110;
 const START_BOOK = 'Isa';
 const SUGGESTED_PAIRS = [['Isa', 'Matt'], ['Ps', 'Heb'], ['Gen', 'Rev']];
 
-// Names for a run of unlabelled books that all belong to one of these parts of a
-// section (books.json `section`), longest first. Other runs get a range ("1 Thess–Phlm").
-const GROUP_NAMES = {
-  'Major Prophets': ['Major Prophets', 'Major Proph.', 'Major'],
-  'Minor Prophets': ['Minor Prophets', 'Minor Proph.', 'Minor'],
-  Gospels: ['Gospels'],
-};
-
-// Shorter section labels, tried in order when the full name doesn't fit its arc.
-const SECTION_SHORT = {
-  'Gospels & Acts': ['Gospels'],
-  'Pauline letters': ['Paul'],
-  'General letters': ['General'],
-  Revelation: ['Rev.'],
-};
+// A run of unlabelled books that all belong to one of these parts of a section
+// (books.json `section`) is named after the part (GROUP_NAMES). Other runs get a
+// range ("1 Thess–Phlm").
+const PARTS = ['Major Prophets', 'Minor Prophets', 'Gospels'];
 
 const svg = (tag, attrs = {}) => {
   const el = document.createElementNS(SVG_NS, tag);
@@ -110,18 +102,19 @@ function writeQuery(self, pin, index) {
 }
 
 export async function renderBooks(container, [query = '']) {
-  const title = h('h1', { class: 'view-title', tabindex: '-1' }, 'Book links');
-  const figure = h('div', { class: 'books-figure' }, h('p', { class: 'status' }, 'Loading cross-references…'));
-  container.replaceChildren(
-    title,
-    h(
-      'p',
-      { class: 'view-intro' },
-      'Each book of the Bible is an arc around the circle, sized by its cross-references, and each ribbon joins two books that cite each other. Wider ribbons have more votes. ',
-      votesHelp(),
-    ),
-    figure,
+  // The interaction hint depends on the chart's width, so buildChart fills it in.
+  const hint = h('p', {});
+  const { header, title } = viewHeader(
+    'Book links',
+    'The 66 books around a circle, joined where they cite each other.',
+    [
+      'Each book is an arc, coloured by its section and sized by its cross-references. A ribbon joins two books that cite each other: its width at each end shows the votes from that book, and it takes the colour of the book that cites the other more.',
+      hint,
+      'Turn on “Links within a book” to add the references a book makes to itself.',
+    ],
   );
+  const figure = h('div', { class: 'books-figure' }, h('p', { class: 'status' }, 'Loading cross-references…'));
+  container.replaceChildren(header, figure);
   document.title = 'Book links · Bible Cross-Reference Explorer';
 
   let books, bookMatrix;
@@ -134,10 +127,10 @@ export async function renderBooks(container, [query = '']) {
   }
   if (!title.isConnected) return;
   const index = getIndex(books);
-  buildChart(figure, index, bookMatrix.matrix, readQuery(query, index));
+  buildChart(figure, hint, index, bookMatrix.matrix, readQuery(query, index));
 }
 
-function buildChart(figure, index, matrix, initial) {
+function buildChart(figure, hint, index, matrix, initial) {
   const { books } = index;
   const N = books.length;
   const secOf = books.map(sectionOf);
@@ -152,13 +145,9 @@ function buildChart(figure, index, matrix, initial) {
   );
 
   // --- Elements -------------------------------------------------------------------
-  const selfToggle = h('input', { type: 'checkbox', id: 'books-self' });
-  selfToggle.checked = initial.self;
-  const controls = h(
-    'div',
-    { class: 'books-controls' },
-    h('label', { class: 'books-toggle', for: 'books-self' }, selfToggle, 'Show links within a book'),
-  );
+  const selfSwitch = toggleSwitch('books-self', initial.self);
+  const selfToggle = selfSwitch.input;
+  const controls = controlBar(control({ label: 'Links within a book', for: 'books-self', body: selfSwitch.body }));
 
   const canvases = ['base', 'dim', 'highlight'].map((n) => h('canvas', { class: `books-layer books-${n}`, 'aria-hidden': 'true' }));
   const [baseCanvas, dimCanvas, hiCanvas] = canvases;
@@ -179,16 +168,11 @@ function buildChart(figure, index, matrix, initial) {
     stack,
   );
   const live = h('p', { class: 'visually-hidden', 'aria-live': 'polite' });
-  const legend = h(
-    'ul',
-    { class: 'legend', 'aria-label': 'Sections' },
-    SECTIONS.map((s) => h('li', {}, h('span', { class: 'swatch', style: `background: var(${s.token})` }), s.name)),
-  );
-  const hint = h('p', { class: 'books-hint' });
+  const legend = makeLegend(SECTIONS.map((s) => [s.token, s.name]), 'Sections');
   const panel = h('aside', { class: 'books-panel', 'aria-labelledby': 'books-panel-title' });
   figure.replaceChildren(
     controls,
-    h('div', { class: 'books-layout' }, h('div', { class: 'books-main' }, chart, live, legend, hint), panel),
+    h('div', { class: 'books-layout' }, h('div', { class: 'books-main' }, chart, live, legend), panel),
   );
 
   // --- State --------------------------------------------------------------------------
@@ -289,7 +273,7 @@ function buildChart(figure, index, matrix, initial) {
     const sections = SECTIONS.map((s, si) => {
       const first = groups[secOf.indexOf(si)], last = groups[secOf.lastIndexOf(si)];
       const start = first.startAngle, end = last.endAngle;
-      const options = [s.name, ...(SECTION_SHORT[s.name] ?? [])];
+      const options = GROUP_NAMES[s.name] ?? [s.name];
       const text = options.find((t) => width(t) / rSec <= end - start + SECTION_PAD * 0.8) ?? options.at(-1);
       return { start, end, mid: (start + end) / 2, text };
     });
@@ -354,7 +338,7 @@ function buildChart(figure, index, matrix, initial) {
     // first and last run lose their labels too, so the runs merge into one.
     function sectionItems(members, keptIn, si, groups, names, widths, room, italicWidth) {
       const kept = new Set(keptIn);
-      for (const part of Object.keys(GROUP_NAMES)) {
+      for (const part of PARTS) {
         const inPart = members.filter((i) => books[i].section === part);
         const dropped = inPart.filter((i) => !kept.has(i));
         const runs = dropped.filter((i, n) => n === 0 || dropped[n - 1] !== inPart[inPart.indexOf(i) - 1]).length;
@@ -368,7 +352,7 @@ function buildChart(figure, index, matrix, initial) {
           const part = books[run[0]].section;
           const sameName = run.every((i) => books[i].section === part) && part !== SECTIONS[si].name;
           const options = [
-            ...(sameName ? GROUP_NAMES[part] ?? [] : []),
+            ...(sameName && PARTS.includes(part) ? GROUP_NAMES[part] : []),
             `${index.shortName(books[run[0]])}–${index.shortName(books[run.at(-1)])}`,
             `${run.length} books`,
           ];
@@ -629,7 +613,7 @@ function buildChart(figure, index, matrix, initial) {
   function groupTitle({ a, b }) {
     const part = books[a].section;
     const whole = books.filter((x) => x.section === part);
-    return part in GROUP_NAMES && whole[0].index === a && whole.at(-1).index === b ? part : `${name(a)} to ${name(b)}`;
+    return PARTS.includes(part) && whole[0].index === a && whole.at(-1).index === b ? part : `${name(a)} to ${name(b)}`;
   }
 
   const titleOf = (sel) => (sel.type === 'book' ? name(sel.a) : sel.type === 'group' ? groupTitle(sel) : pairTitle(sel.a, sel.b));
@@ -738,11 +722,11 @@ function buildChart(figure, index, matrix, initial) {
     panel.classList.toggle('is-open', !!pin && !intro);
     panel.classList.toggle('is-intro', intro);
     const find = (abbr) => books.find((b) => b.abbr === abbr).index;
-    const suggestions = () =>
+    const suggestions = (help = false) =>
       h(
         'div',
         { class: 'books-suggest' },
-        h('h3', {}, 'Pairs to try'),
+        h('h3', {}, 'Pairs to try', ...(help ? [' ', votesHelp()] : [])),
         h(
           'ul',
           { class: 'books-partners' },
@@ -763,7 +747,7 @@ function buildChart(figure, index, matrix, initial) {
       panel.replaceChildren(
         heading('Details'),
         h('p', { class: 'status' }, 'Click a book or a ribbon to list its strongest links here.'),
-        suggestions(),
+        suggestions(true),
       );
       return;
     }
@@ -813,7 +797,7 @@ function buildChart(figure, index, matrix, initial) {
       panel.replaceChildren(
         ...(intro ? [h('p', { class: 'books-panel-lead' }, `To start, ${name(i)} is selected. Choose any book or ribbon in the chart to see its links here instead.`)] : []),
         h('div', { class: 'books-panel-head' }, heading(name(i)), close),
-        h('p', { class: 'books-panel-meta' }, `${SECTIONS[secOf[i]].name} · ${votesText(totalVotes)} to and from other books`),
+        h('p', { class: 'books-panel-meta' }, `${SECTIONS[secOf[i]].name} · ${votesText(totalVotes)} with other books `, votesHelp()),
         h('h3', {}, 'Most linked books'),
         h(
           'ol',
@@ -844,7 +828,7 @@ function buildChart(figure, index, matrix, initial) {
         : `From ${name(a)} to ${name(b)}: ${votesText(matrix[a][b])}. From ${name(b)} to ${name(a)}: ${votesText(matrix[b][a])}.`;
     panel.replaceChildren(
       h('div', { class: 'books-panel-head' }, heading(pairTitle(a, b)), close),
-      h('p', { class: 'books-panel-meta' }, meta),
+      h('p', { class: 'books-panel-meta' }, `${meta} `, votesHelp()),
       h('p', { class: 'books-panel-books' }, 'Strongest links of ', bookButton(a, name(a)), ...(a === b ? [] : [' or ', bookButton(b, name(b))])),
       h('h3', {}, 'Top verse pairs'),
       status,
@@ -1030,11 +1014,9 @@ function buildChart(figure, index, matrix, initial) {
   });
 
   function updateHint() {
-    hint.textContent =
-      (L.narrow
-        ? 'Tap a book or a ribbon to see its links, and tap it again for details.'
-        : 'Hover over a book or a ribbon to see its links, and click for details.') +
-      ' Each ribbon takes the colour of the book that cites the other more; its width at each end shows the votes from that book.';
+    hint.textContent = L.narrow
+      ? 'Tap a book or a ribbon to see its links, and tap it again for details.'
+      : 'Hover over a book or a ribbon to see its links, and click for details.';
   }
 
   L = layout();

@@ -4,13 +4,26 @@ import { getIndex } from '../refs.js';
 import { attachPreview } from '../preview.js';
 import { renderGraph } from './verse-graph.js';
 import { votesEl, votesHelp } from '../votes.js';
+import { viewHeader } from '../view-header.js';
+import { legend } from '../legend.js';
+import { kjvMark } from '../version.js';
 
 const TOP = 10;
 const WELCOME_KEY = 'welcome-dismissed';
 const STARTERS = ['Gen.1.1', 'Ps.23.1', 'Isa.53.5', 'John.1.1'];
 
 export async function renderVerse(container, [ref]) {
-  const title = h('h1', { class: 'view-title', tabindex: '-1' }, ref.replaceAll('.', ' '));
+  const titleName = h('span', {}, ref.replaceAll('.', ' '));
+  const kjv = kjvMark();
+  const { header, title } = viewHeader(
+    [titleName, ' ', kjv],
+    'The verse, the verses it cross-references, and the verses that cite it.',
+    [
+      '“References” lists the verses this one points to, and “Referenced by” the verses that point back to it, strongest by votes first. Hover over or focus any reference to read it, and click it to go there.',
+      'The connections graph draws up to 8 verses it references and 7 that reference it, placed around it in Bible order: Genesis at the lower left, Old Testament on the left, New Testament on the right, Revelation at the lower right. Arrows point from the citing verse to the verse it cites; thicker lines have more votes. On a touch screen, tap a verse in the graph to read it and tap again to open it.',
+      h('p', { class: 'verse-keys' }, 'Press ← or → to step through verses.'),
+    ],
+  );
   const textBox = h('div', { class: 'verse-text-box' }, h('p', { class: 'status' }, 'Loading verse…'));
   const reading = h('div', { class: 'reading-column' }, textBox);
   const margin = h(
@@ -19,7 +32,7 @@ export async function renderVerse(container, [ref]) {
     h('p', { class: 'status' }, 'Loading cross-references…'),
   );
   const graph = h('section', { class: 'graph-section', 'aria-labelledby': 'graph-title' });
-  container.replaceChildren(...welcomeBand(title), title, h('div', { class: 'verse-layout' }, reading, margin, graph));
+  container.replaceChildren(...welcomeBand(title), header, h('div', { class: 'verse-layout' }, reading, margin, graph));
 
   try {
     const books = await loadBooks();
@@ -27,17 +40,21 @@ export async function renderVerse(container, [ref]) {
     const index = getIndex(books);
     const id = index.parseOsis(ref);
     if (id === null) {
-      title.textContent = 'Verse not found';
+      titleName.textContent = 'Verse not found';
+      title.replaceChildren(titleName);
+      document.title = 'Verse not found · Bible Cross-Reference Explorer';
       textBox.replaceChildren(
         h('p', {}, `No verse matches “${ref}”. Use a reference like `, h('a', { href: '#/verse/John.3.16' }, 'John.3.16'), '.'),
       );
       margin.remove();
       graph.remove();
+      header.querySelector('.view-intro').remove();
+      header.querySelector('.how-to').remove();
       return;
     }
     const verse = { ...index.locate(id), id };
     const name = index.label(id);
-    title.textContent = name;
+    titleName.textContent = name;
     document.title = `${name} · Bible Cross-Reference Explorer`;
     graph.replaceChildren(h('h2', { id: 'graph-title' }, 'Connections'), h('p', { class: 'status' }, 'Loading connections…'));
     reading.append(verseNav(verse, index, title));
@@ -170,7 +187,6 @@ function verseNav(verse, index, title) {
       { class: 'verse-chapter-link' },
       h('a', { href: `#/arcs?ch=${verse.book.abbr}.${verse.chapter}` }, 'See this chapter on the arc diagram'),
     ),
-    h('p', { class: 'verse-keys' }, 'Press ← or → to step through verses.'),
   );
 }
 
@@ -221,29 +237,19 @@ const SIDE_BY_SIDE = '(min-width: 1100px)';
 
 async function renderGraphSection(section, centerId, out, incoming, index) {
   const holder = h('div', { class: 'graph-holder' });
-  const legend = h('ul', { class: 'legend', 'aria-label': 'Legend' });
-  section.replaceChildren(
-    h('h2', { id: 'graph-title' }, 'Connections'),
-    h(
-      'p',
-      { class: 'graph-note' },
-      'Up to 8 verses it references and 7 that reference it, the strongest by votes, placed around it in Bible order: Genesis at the lower left, Old Testament on the left, New Testament on the right, Revelation at the lower right. Arrows point from the citing verse to the verse it cites; thicker lines have more votes.',
-    ),
-    holder,
-  );
+  section.replaceChildren(h('h2', { id: 'graph-title' }, 'Connections'), holder);
   // Labels are measured for the layout, so wait for the web fonts first.
   await document.fonts.ready;
   if (!holder.isConnected) return;
   const draw = () => {
     const sticky = window.matchMedia(SIDE_BY_SIDE).matches;
-    // Room left in the window under the sticky top offset, heading, note and legend.
+    // Room left in the window under the sticky top offset, heading and legend.
     const maxHeight = sticky ? Math.max(360, window.innerHeight - (holder.offsetTop - section.offsetTop) - 96) : Infinity;
     return renderGraph(holder, { centerId, out, incoming, index, maxHeight });
   };
   const kinds = draw();
   if (!kinds) {
     holder.replaceWith(h('p', { class: 'status' }, 'This verse has no cross-references to draw.'));
-    section.querySelector('.graph-note').remove();
     return;
   }
   // Redraw when the column width changes noticeably (rotation, window resize).
@@ -260,17 +266,16 @@ async function renderGraphSection(section, centerId, out, incoming, index) {
   });
   observer.observe(holder);
   // Only the kinds of mark this graph actually draws.
-  legend.append(
-    ...[
-      kinds.ot && h('li', {}, h('span', { class: 'swatch ot' }), 'Old Testament'),
-      kinds.nt && h('li', {}, h('span', { class: 'swatch nt' }), 'New Testament'),
-      h('li', {}, h('span', { class: 'swatch current' }), 'This verse'),
-      kinds.out && h('li', {}, arrowSwatch('out'), 'References'),
-      kinds.in && h('li', {}, arrowSwatch('in'), 'Referenced by'),
-      kinds.faint && h('li', {}, arrowSwatch('faint'), 'No votes yet'),
-    ].filter(Boolean),
+  section.append(
+    legend([
+      kinds.ot && ['ot', 'Old Testament'],
+      kinds.nt && ['nt', 'New Testament'],
+      ['current', 'This verse'],
+      kinds.out && [arrowSwatch('out'), 'References'],
+      kinds.in && [arrowSwatch('in'), 'Referenced by'],
+      kinds.faint && [arrowSwatch('faint'), 'No votes yet'],
+    ]),
   );
-  section.append(legend);
 }
 
 // A tiny edge for the legend: from this verse (out), into it (in), or dashed (faint).

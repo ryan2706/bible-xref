@@ -7,7 +7,7 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 export const themeColor = (token) => getComputedStyle(root).getPropertyValue(token).trim();
 
 // Section list and lookup live in sections.js (no DOM, so the data build can use them).
-export { SECTIONS, sectionOf } from './sections.js';
+export { SECTIONS, sectionOf, GROUP_NAMES } from './sections.js';
 
 export const isDark = () => root.dataset.theme === 'dark' || (!root.dataset.theme && darkQuery.matches);
 

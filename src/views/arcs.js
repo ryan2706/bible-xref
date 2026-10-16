@@ -7,9 +7,12 @@
 import { h } from '../dom.js';
 import { loadBooks, loadOverview } from '../data.js';
 import { getIndex } from '../refs.js';
-import { themeColor, isDark } from '../theme.js';
+import { themeColor, isDark, GROUP_NAMES } from '../theme.js';
 import { showPreview, hidePreview } from '../preview.js';
 import { votesHelp } from '../votes.js';
+import { viewHeader } from '../view-header.js';
+import { controlBar, control, controlStatus, toggleSwitch } from '../controls.js';
+import { legend as makeLegend } from '../legend.js';
 
 const DEFAULT_VOTES = 50;
 const MAX_VOTES = 500;
@@ -30,19 +33,6 @@ function storedNotesHidden() {
     return false;
   }
 }
-
-// Names for runs of books labelled as a group when the chart is too crowded to
-// label them one by one, longest first.
-const GROUP_NAMES = {
-  Law: ['Law'],
-  History: ['History'],
-  Poetry: ['Poetry'],
-  'Major Prophets': ['Major Prophets', 'Major Proph.'],
-  'Minor Prophets': ['Minor Prophets', 'Minor Proph.'],
-  Gospels: ['Gospels'],
-  'Pauline Epistles': ['Pauline letters', 'Paul'],
-  'General Epistles': ['General letters', 'General'],
-};
 
 // Filters and the selected chapter live in the hash so views can be shared:
 // #/arcs?min=30&book=Isa&ch=Isa.53
@@ -79,17 +69,20 @@ function writeQuery(min, book, zoom, chapter) {
 }
 
 export async function renderArcs(container, [query = '']) {
-  const title = h('h1', { class: 'view-title', tabindex: '-1' }, 'Chapter arcs');
-  const figure = h('div', { class: 'arcs-figure' }, h('p', { class: 'status' }, 'Loading cross-references…'));
-  container.replaceChildren(
-    title,
-    h(
-      'p',
-      { class: 'view-intro' },
-      'Every chapter from Genesis to Revelation in one line, with an arc for each pair of chapters that cross-reference each other. Bars under the line show how long each chapter is.',
-    ),
-    figure,
+  // The interaction hint depends on the chart's width, so buildChart fills it in.
+  const hint = h('p', {});
+  const { header, title } = viewHeader(
+    'Chapter arcs',
+    'Every chapter of the Bible on one line, joined by its cross-references.',
+    [
+      'Each arc joins two chapters that cross-reference each other. Lapis arcs stay within the Old Testament, gold arcs within the New, and arcs between the Testaments turn from lapis to gold at their highest point. Where many arcs overlap the colour deepens, so dense bands show the most connected passages.',
+      'Bars under the line show how long each chapter is. Numbered markers on the line point to the notes.',
+      hint,
+      'Lower “Minimum votes” to see more links, or choose a book to see only the links that touch it.',
+    ],
   );
+  const figure = h('div', { class: 'arcs-figure' }, h('p', { class: 'status' }, 'Loading cross-references…'));
+  container.replaceChildren(header, figure);
   document.title = 'Chapter arcs · Bible Cross-Reference Explorer';
 
   let books, overview;
@@ -102,10 +95,10 @@ export async function renderArcs(container, [query = '']) {
   }
   if (!title.isConnected) return;
   const index = getIndex(books);
-  buildChart(figure, index, overview, readQuery(query, index, overview.minVotes));
+  buildChart(figure, hint, index, overview, readQuery(query, index, overview.minVotes));
 }
 
-function buildChart(figure, index, overview, initial) {
+function buildChart(figure, hint, index, overview, initial) {
   const { chapters } = index;
   const N = chapters.length;
   const ntStart = index.books.find((b) => b.testament === 'NT').firstChapter;
@@ -134,23 +127,16 @@ function buildChart(figure, index, overview, initial) {
       ),
     ),
   );
-  const count = h('p', { class: 'arcs-count', role: 'status' });
-  const notesToggle = h('input', { type: 'checkbox', id: 'arcs-notes' });
-  notesToggle.checked = !storedNotesHidden();
+  const count = controlStatus();
+  const notesSwitch = toggleSwitch('arcs-notes', !storedNotesHidden());
+  const notesToggle = notesSwitch.input;
   // Phones open on the whole Bible fitted to the screen; this switches to the wider,
   // sideways-scrolling chart and back. Shown only where the chart would scroll.
   const zoomButton = h('button', { type: 'button', class: 'arcs-zoom' });
-  const controls = h(
-    'div',
-    { class: 'arcs-controls' },
-    h(
-      'div',
-      { class: 'arcs-control' },
-      h('div', { class: 'arcs-control-head' }, h('label', { for: 'arcs-votes' }, 'Minimum votes'), votesHelp()),
-      h('div', { class: 'arcs-slider' }, slider, votesOut),
-    ),
-    h('div', { class: 'arcs-control' }, h('label', { for: 'arcs-book' }, 'Book'), bookSelect),
-    h('label', { class: 'arcs-check', for: 'arcs-notes' }, notesToggle, 'Show notes'),
+  const controls = controlBar(
+    control({ label: 'Minimum votes', for: 'arcs-votes', help: votesHelp(), body: [slider, votesOut] }),
+    control({ label: 'Book', for: 'arcs-book', body: bookSelect }),
+    control({ label: 'Show notes', for: 'arcs-notes', body: notesSwitch.body }),
     zoomButton,
     count,
   );
@@ -173,15 +159,12 @@ function buildChart(figure, index, overview, initial) {
     },
     stack,
   );
-  const legend = h(
-    'ul',
-    { class: 'legend', 'aria-label': 'Legend' },
-    h('li', {}, h('span', { class: 'swatch ot' }), 'Old Testament to Old Testament'),
-    h('li', {}, h('span', { class: 'swatch nt' }), 'New Testament to New Testament'),
-    h('li', {}, h('span', { class: 'swatch cross' }), 'Between the Testaments'),
-    h('li', {}, h('span', { class: 'swatch current' }), 'Selected chapter or note'),
-  );
-  const hint = h('p', { class: 'arcs-hint' });
+  const legend = makeLegend([
+    ['ot', 'Old Testament'],
+    ['nt', 'New Testament'],
+    ['cross', 'Between the Testaments'],
+    ['current', 'Selected chapter'],
+  ]);
   // Notes on what's worth seeing, numbered like their markers on the chart.
   const notesList = h('ol', { class: 'arcs-notes', 'aria-label': 'Notes on the chart' });
   const markers = h('div', { class: 'arcs-markers', 'aria-hidden': 'true' });
@@ -190,7 +173,7 @@ function buildChart(figure, index, overview, initial) {
   // rather than in a popover that would cover them.
   const chapterLine = h('p', { class: 'arcs-chapter' });
   chapterLine.hidden = true;
-  figure.replaceChildren(controls, hint, notesList, chapterLine, scroller, live, legend);
+  figure.replaceChildren(controls, notesList, chapterLine, scroller, live, legend);
 
   // --- State ---------------------------------------------------------------------
   let minVotes = initial.min;
@@ -251,10 +234,14 @@ function buildChart(figure, index, overview, initial) {
     const axisY = arcH + 6;
     const barTop = axisY + 2;
     const labelY = barTop + BAR_MAX + 16; // first row of book labels (baseline)
+    // The chart is wider than the page column on wide screens; its Testament labels
+    // stay inside the column, lined up with the controls above.
+    const columnInset = scrolls ? 0 : controls.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
     const L = {
       W,
       narrow,
       scrolls,
+      inset: Math.max(PAD_X, columnInset),
       step,
       x,
       axisY,
@@ -497,13 +484,14 @@ function buildChart(figure, index, overview, initial) {
       ctx.fillStyle = selected ? colors.ink : colors.muted;
       ctx.fillText(label.text, label.x, label.y);
     }
-    // Testament names sit in the chart's empty top corners, over their halves.
+    // Testament names sit in the chart's empty top corners, over their halves,
+    // inside the page column.
     ctx.font = labelFont(700);
     ctx.fillStyle = colors.muted;
     ctx.textAlign = 'left';
-    ctx.fillText('Old Testament', PAD_X, 14);
+    ctx.fillText('Old Testament', L.inset, 14);
     ctx.textAlign = 'right';
-    ctx.fillText('New Testament', L.W - PAD_X, 14);
+    ctx.fillText('New Testament', L.W - L.inset, 14);
   }
 
   function readColors() {
@@ -957,6 +945,7 @@ function buildChart(figure, index, overview, initial) {
     if (!stack.isConnected) return observer.disconnect();
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      if (!stack.isConnected) return observer.disconnect(); // navigated away meanwhile
       const narrow = scroller.clientWidth < NARROW;
       // The zoomed-in chart has a fixed width; the others follow the page.
       if (narrow && zoom && L.scrolls) return;

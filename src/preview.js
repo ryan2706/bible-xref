@@ -3,6 +3,7 @@
 // it, and Escape closes it (WCAG 1.4.13).
 import { h } from './dom.js';
 import { getVerseText } from './data.js';
+import { kjvMark } from './version.js';
 
 const PREVIEW_CHARS = 160;
 let popover;
@@ -50,8 +51,10 @@ async function show(anchor, title, text) {
   current = anchor;
   const mine = ++token;
   const ready = typeof text === 'string' || text instanceof Node;
+  // Verse text (a promise) carries the translation's mark beside the reference. Out of
+  // the tab order: focus stays on the reference, and the Verse view's heading has it too.
   popover.replaceChildren(
-    h('strong', {}, title),
+    h('strong', {}, title, ...(ready ? [] : [' ', kjvMark({ tabindex: '-1' })])),
     h(text instanceof Node ? 'div' : 'span', { class: ready ? 'preview-note' : 'preview-text' }, ready ? text : 'Loading…'),
   );
   popover.hidden = false;

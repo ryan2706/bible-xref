@@ -1,6 +1,7 @@
 import { h } from '../dom.js';
 import { loadThumb } from '../data.js';
 import { VOTES_HELP } from '../votes.js';
+import { viewHeader } from '../view-header.js';
 
 const ARCS_MIN_VOTES = 50; // as drawn by scripts/build-thumbs.mjs: the arc diagram's default
 
@@ -50,7 +51,7 @@ const SECTIONS = [
     caption: 'All 66 books, coloured by section',
     body: [
       'Each book is an arc around the circle, coloured by its section (Law, History, Poetry, Prophets, Gospels and Acts, Pauline letters, General letters, Revelation) and sized by how many cross-references it has. A ribbon joins two books that cite each other, and its width shows their combined votes.',
-      'Hover over or tap a book or ribbon to bring it forward; click it, tap it again or press Enter to list its strongest links in the details panel. “Show links within a book” adds the references a book makes to itself.',
+      'Hover over or tap a book or ribbon to bring it forward; click it, tap it again or press Enter to list its strongest links in the details panel. Turning on “Links within a book” adds the references a book makes to itself.',
     ],
   },
   {
@@ -81,7 +82,13 @@ const SECTIONS = [
 const shareHash = (id) => `#/about?s=${id}`;
 
 export function renderAbout(container, [query = '']) {
-  const title = h('h1', { class: 'view-title', tabindex: '-1' }, 'About');
+  const { header, title } = viewHeader(
+    'About',
+    'What this site shows, how to read the diagrams, and where the data comes from.',
+    [
+      'Each section below explains one view, with a picture of it and a link to open it. Every view has its own short guide like this one, under “How to read this” beneath its title.',
+    ],
+  );
   const headings = new Map();
   const tocLinks = new Map();
   const thumbs = {};
@@ -134,8 +141,7 @@ export function renderAbout(container, [query = '']) {
   );
 
   container.replaceChildren(
-    title,
-    h('p', { class: 'view-intro' }, 'What this site shows, how to read the diagrams, and where the data comes from.'),
+    header,
     h('div', { class: 'about' }, toc, ...sections),
   );
   document.title = 'About · Bible Cross-Reference Explorer';

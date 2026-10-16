@@ -51,7 +51,10 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   tightens to stay on one line: the button shows only its icon (label kept for screen readers, `title` tooltip) and
   `search.js` shortens the placeholder.
   `themeColor('--arc-ot')` reads a colour token for canvas drawing. It re-exports `SECTIONS` and
-  `sectionOf(book)` (the 8 chord-diagram sections, their order and colour tokens) from `src/sections.js`, which has
+  `sectionOf(book)` (the 8 chord-diagram sections, their order and colour tokens) and `GROUP_NAMES` (names for a run of
+  books labelled together, longest first, keyed by books.json section or chord section; one rule for short forms:
+  whole words, never clipped with a full stop, so "Minor" like "Paul" and "General", not "Minor Proph."; both charts
+  use it) from `src/sections.js`, which has
   no DOM code so the data build can import it too. Likewise `src/links.js` (`strongestLinks`: the 15 verses a verse's
   graph draws, up to 8 it references and 7 that reference it by votes, unused places going to the other side; a
   verse linked both ways takes one place and keeps both links) and `src/graph-layout.js` (`radialLayout`: places those verses round an ellipse in canonical order,
@@ -59,6 +62,26 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   order until no label overlaps; labels outside the ellipse, edges inside) are shared by `verse-graph.js` and the
   thumbnail build.
 - `src/dom.js`: `h(tag, attrs, ...children)`. Children are set as text, never parsed as HTML.
+- `src/view-header.js`: `viewHeader(title, intro, howTo)` returns `{ header, title, guide }`: the h1, a one-sentence
+  `.view-intro`, and a `<details class="how-to">` "How to read this", open on a visitor's first visit to the site and
+  then as they last left it, across views and visits (localStorage `how-to-open`: `'1'` open, `'0'` closed, missing on
+  a first visit). Every view starts with it, Verse included; per-view hints (what colours mean, how to
+  hover/tap, keyboard keys) go in `howTo`, not in loose paragraphs around the chart. A `howTo` item is a paragraph's
+  text, an array of its children, or an element (keep a reference to update it, as Arcs and Books do for the
+  width-dependent hint).
+- `src/controls.js`: chart controls, the same on every view. `controlBar(...items)`, `control({ label, for, help, body })`
+  (label row with an optional "?" over a control row, so all labels share a baseline), `toggleSwitch(id, checked)`
+  (`{ input, body }`: a `role="switch"` checkbox styled as an ink switch with an On/Off word; use it, never a bare
+  checkbox) and `controlStatus()` (a live count in the control row, e.g. "8,404 arcs").
+- `src/legend.js`: `legend(items, label)`: one wrapping row of `[swatch, text]` pairs right under the chart, the same
+  at every width. A swatch is `'ot'`, `'nt'`, `'cross'`, `'current'`, a colour token (`'--sec-law'`) or an element
+  (the verse graph's edge swatches); falsy items are skipped. Keep labels short ("Old Testament", "Selected chapter")
+  so the row wraps the same way on phones.
+- `src/version.js`: `kjvMark(attrs)`, "KJV" in small caps linking to About → Credits (`#/about?s=credits`). It sits
+  beside the reference in the Verse view's heading and in verse-text previews (`preview.js` adds it when the popover
+  shows verse text, out of the tab order), not in notes or chart previews.
+- Footer (`index.html`): one line, the OpenBible.info credit (CC BY 4.0) and a link to About, which has the full
+  credits.
 - `src/router.js` + `src/main.js`: hash routes (see the New view checklist below). A new view needs a route pattern here and an
   entry in the `views` map in `main.js`; the nav link's `data-view` must match.
 - `src/search.js`: header search combobox (reference lookup only; free-text search will
@@ -72,10 +95,10 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   can't all fit), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
   canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`, and `&ch=Isa.53`
   starts with that chapter highlighted and keeps the pinned chapter in the URL; on phones that chapter is described
-  in an inline line under the controls instead of the popover; the "how to read" hint sits above the chart; up to
+  in an inline line under the controls instead of the popover; the hover/tap hint is in "How to read this"; up to
   three numbered notes (Psalms and Isaiah, Paul's letters, the Synoptics) with numbers worked out from the arcs shown,
   markers on the axis, and hover/focus/click highlighting their arcs; hidden while a book is chosen or by the "Show notes"
-  box, kept in localStorage `arcs-notes-hidden`; below 720px the chart opens fitted to the screen, where a tap selects
+  switch, kept in localStorage `arcs-notes-hidden`; the "Old Testament"/"New Testament" labels are inset to the page column even though the chart is wider; below 720px the chart opens fitted to the screen, where a tap selects
   a whole book (chapters are ~0.3px wide) and the inline line offers "Zoom in to <Book>" and previous/next book buttons
   (one-chapter books are under a pixel wide); "Zoom in" switches to the
   1700px sideways-scrolling chart, `&zoom=1`, where taps pick chapters),
@@ -108,9 +131,10 @@ Follow this for every new view (`src/views/arcs.js` is the reference implementat
    optional query (`/^#\/arcs(?:\?(.*))?$/`) so filtered views can be shared.
 2. **Register**: import the render function in `src/main.js` and add it to the `views` map.
    The nav link in `index.html` needs a matching `data-view`.
-3. **Render function**: `renderX(container, params)`. Start with
-   `h('h1', { class: 'view-title', tabindex: '-1' }, …)` (focus moves there after navigation),
-   a `.view-intro` line, and set `document.title` to `"<View> · Bible Cross-Reference Explorer"`.
+3. **Render function**: `renderX(container, params)`. Start with `viewHeader()` from `src/view-header.js`
+   (the h1 that focus moves to after navigation, a one-sentence intro and "How to read this"), and set
+   `document.title` to `"<View> · Bible Cross-Reference Explorer"`. Controls come from `src/controls.js` and
+   the legend from `src/legend.js`, directly under the chart.
 4. **Loading and errors**: show a `.status` "Loading…" line, load through `src/data.js` only,
    and show a plain-language error if a fetch fails. After every `await`, return early if the
    view's heading is no longer connected (the user navigated away).
