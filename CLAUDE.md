@@ -108,11 +108,15 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   three numbered notes (Psalms and Isaiah, Paul's letters, the Synoptics) with numbers worked out from the arcs shown,
   markers on the axis, and hover/focus/click highlighting their arcs; hidden while a book is chosen or by the "Show notes"
   switch, kept in localStorage `arcs-notes-hidden`; the "Old Testament"/"New Testament" labels are inset to the page column even though the chart is wider; the chart
-  opens fitted to the screen, where chapters are under `MIN_TAP` (4px) wide (~0.3px on phones, ~0.8px on tablets), so
-  a touch tap selects a whole book, at any width, and the inline line offers "Zoom in to <Book>" and previous/next
-  book buttons (one-chapter books are under a pixel wide); "Zoom in" (shown below 720px, on coarse pointers, and
-  while zoomed) switches to the ~4,780px sideways-scrolling chart that gives every chapter 4px, `&zoom=1`, where taps
-  pick chapters; canvases cap their pixel ratio at `MAX_CANVAS_PX` per canvas so that chart stays light),
+  always fits the screen (it never scrolls sideways), where chapters are under `MIN_TAP` (4px) wide (~0.3px on phones,
+  ~0.8px on tablets), so a touch tap selects a whole book, at any width, and the inline line offers "Zoom in to <Book>"
+  and previous/next book buttons (one-chapter books are under a pixel wide); zooming in is focus plus context
+  (`widthsFor`): the book's chapters get up to `FOCUS_MAX` (16px) each, within `FOCUS_SHARE` (80%) of the width, every
+  other book is squeezed proportionally into the rest, and arcs keep their real ends; `&zoom=Isa` (older `zoom=1`
+  links zoom to the `&ch=` chapter's book); the change animates over `FOCUS_MS`, redrawing only the colour layer per
+  frame, and jumps under reduced motion; the focus line (`.arcs-focus`) names the book, "Show the whole Bible" and
+  previous/next buttons that move the zoom; taps inside the zoomed book always pick chapters, however narrow (Psalms
+  gets ~1.8px at 390px), taps elsewhere pick books; notes are hidden while zoomed),
   `books.js` (chord diagram: ribbons on the same three stacked canvases with `isPointInPath` hit testing,
   book arcs and labels in an SVG overlay, 11px on phones and 12px otherwise; labels never leave their section's span,
   and crowded runs collapse into one group label like "Minor Prophets" or "3 books", which selects the whole run
@@ -135,6 +139,9 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   self-links on/off. `graph-labels.spec.js` checks that no verse-graph label touches an edge, arrowhead, node or
   other label, for 11 verses at 6 widths in both themes ("John 10:28" in John 3:16, "Rom 5:10" in Rom 5:6 and
   "1 Tim 1:15" in Luke 19:10 must stay visible). Both have a negative control that must be flagged.
+  `arcs-zoom.spec.js` covers the Arcs zoom at 390, 768 and 1024px with touch (Psalms, Jude, previous/next,
+  the keyboard, the animation and reduced motion), placing taps with `chapterPoint()` from `arcs-helpers.js`, which
+  mirrors the chart's geometry (update it if `PAD_X`, `TESTAMENT_GAP` or the focus constants change).
   `regressions.spec.js` holds a test per code-review finding (numbered as in the review); `build-data.spec.js`
   builds from a copy of `data-raw/` (`DATA_RAW`, `DATA_OUT`, `DATA_MAX_BYTES` overrides, for tests only) and checks
   that a bad row or an oversized file fails the build. Tests that break a fetch on purpose allow its console error

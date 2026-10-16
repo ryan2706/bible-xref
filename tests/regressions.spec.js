@@ -1,5 +1,6 @@
 // Regression tests for the October 2026 code review's findings, numbered as in the review.
 import { test, expect, skipWelcome } from './fixtures.js';
+import { chapterPoint } from './arcs-helpers.js';
 
 const hash = (page) => page.evaluate(() => location.hash);
 // Holds a data file's response back by `ms`, or fails it the first `failures` times.
@@ -43,26 +44,10 @@ test.describe('#2 Arcs taps on tablets', () => {
     test(`at ${width}px a tap selects a book, and zooming in lets taps open a chapter`, async ({ page }) => {
       await page.setViewportSize({ width, height: 1000 });
       await page.goto('#/arcs');
-      const stack = page.locator('.arcs-stack');
-      await expect(stack).toBeVisible();
-      // Where a chapter is on screen, from the chart's own geometry (PAD_X 6, TESTAMENT_GAP 10).
-      const chapterPoint = (osisChapter) =>
-        page.evaluate(async (want) => {
-          const books = await (await fetch('data/books.json')).json();
-          const [abbr, n] = want.split('.');
-          const book = books.find((b) => b.abbr === abbr);
-          const N = books.reduce((s, b) => s + b.chapters, 0);
-          const c = book.firstChapter + Number(n) - 1;
-          const ntStart = books.find((b) => b.testament === 'NT').firstChapter;
-          const el = document.querySelector('.arcs-stack');
-          document.querySelector('.arcs-scroll').scrollIntoView({ block: 'center' }); // page-wide, so only scrolls the page
-          const r = el.getBoundingClientRect();
-          const step = (r.width - 22) / N;
-          return { x: r.left + 6 + (c + 0.5) * step + (c >= ntStart ? 10 : 0), y: r.top + r.height * 0.5, step };
-        }, osisChapter);
+      await expect(page.locator('.arcs-stack')).toBeVisible();
 
-      const p = await chapterPoint('Isa.33');
-      expect(p.step).toBeLessThan(4);
+      const p = await chapterPoint(page, 'Isa.33');
+      expect(p.width).toBeLessThan(4);
       await page.touchscreen.tap(p.x, p.y);
       const line = page.locator('.arcs-chapter');
       await expect(line).toBeVisible();
@@ -70,10 +55,12 @@ test.describe('#2 Arcs taps on tablets', () => {
       await expect(line.getByRole('button', { name: 'Previous book: Song of Solomon' })).toBeVisible();
       await expect(line.getByRole('button', { name: 'Next book: Jeremiah' })).toBeVisible();
       await line.getByRole('button', { name: 'Zoom in to Isaiah' }).tap();
-      await expect.poll(() => hash(page)).toContain('zoom=1');
+      await expect.poll(() => hash(page)).toContain('zoom=Isa');
+      await expect(page.locator('.arcs-focus')).toBeVisible();
+      await page.waitForTimeout(600); // the zoom animation
 
-      const q = await chapterPoint('Isa.53');
-      expect(q.step).toBeGreaterThanOrEqual(4);
+      const q = await chapterPoint(page, 'Isa.53', 'Isa');
+      expect(q.width).toBeGreaterThanOrEqual(8);
       await page.touchscreen.tap(q.x, q.y);
       await expect(page.locator('#verse-preview strong')).toHaveText('Isaiah 53');
       await page.touchscreen.tap(q.x + 1, q.y); // a second tap a pixel off still hits the chapter
@@ -221,29 +208,5 @@ test.describe('#9 references are never formatted by hand', () => {
   });
 });
 
-// Not reproduced: centre() only runs on a freshly laid-out chart (scrollLeft 0), so its
-// scroll always happens and clears the flag. Kept as a guard for the two paths that centre.
-test.describe('#7 a scroll after centring a chapter clears its popover', () => {
-  test.use({ hasTouch: true });
-  test.beforeEach(({ page }) => page.setViewportSize({ width: 1024, height: 1000 }));
-  const userScroll = (page) => page.locator('.arcs-scroll').evaluate((s) => (s.scrollLeft -= 300));
-
-  test('opened zoomed in at the end of the Bible', async ({ page }) => {
-    await page.goto('#/arcs?zoom=1&ch=Rev.22');
-    await expect(page.locator('#verse-preview strong')).toHaveText('Revelation 22');
-    await page.waitForTimeout(100);
-    await userScroll(page);
-    await expect(page.locator('#verse-preview')).toBeHidden();
-  });
-
-  test('zoomed out and back in', async ({ page }) => {
-    await page.goto('#/arcs?zoom=1&ch=Rev.22');
-    await expect(page.locator('#verse-preview strong')).toHaveText('Revelation 22');
-    await page.locator('.controls').getByRole('button', { name: 'Show the whole Bible' }).click();
-    await page.locator('.controls').getByRole('button', { name: 'Zoom in' }).click();
-    await expect(page.locator('#verse-preview strong')).toHaveText('Revelation 22');
-    await page.waitForTimeout(100);
-    await userScroll(page);
-    await expect(page.locator('#verse-preview')).toBeHidden();
-  });
-});
+// #7 (centre() leaving its scroll flag set) was not reproducible, and its code is gone: the
+// chart no longer scrolls sideways (see arcs-zoom.spec.js).

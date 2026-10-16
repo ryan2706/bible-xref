@@ -1302,8 +1302,10 @@ main > * {
 
 
 
-/* A chapter opened from a link, described inline on phones (see arcs.js). */
-.arcs-chapter {
+/* A chapter opened from a link, described inline on phones, a tapped book, and the
+   book zoomed in to (see arcs.js). */
+.arcs-chapter,
+.arcs-focus {
   margin: -0.5rem 0 1rem;
   font-size: var(--step--1);
 }
@@ -1328,13 +1330,14 @@ main > * {
   cursor: pointer;
 }
 
-.arcs-chapter strong {
+.arcs-chapter strong,
+.arcs-focus strong {
   font-family: var(--font-text);
   font-size: var(--step-0);
 }
 
 
-/* The chart fits the page on wide screens and scrolls sideways on narrow ones. */
+/* The chart always fits the page; zooming in widens a book within it. */
 .arcs-scroll {
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -1371,7 +1374,7 @@ main > * {
 
 
 
-/* Phones: switches between the fitted and the sideways-scrolling chart. */
+/* Zooms in to a book and back out (see arcs.js). */
 .arcs-zoom {
   font: inherit;
   color: var(--ink);

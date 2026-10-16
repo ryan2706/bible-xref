@@ -18,14 +18,18 @@ const DEFAULT_VOTES = 50;
 const MAX_VOTES = 500;
 const VOTES_STEP = 5;
 const NARROW = 720; // below this the chapter is described inline, under the controls
-// A chapter narrower than this can't be picked by a tap: taps on the fitted chart select
-// a whole book instead, and zooming in widens the chart to give each chapter this much.
+// A chapter narrower than this can't be picked by a tap, so a tap selects its whole book.
 const MIN_TAP = 4;
+// Zooming in to a book (focus plus context) widens its chapters to FOCUS_MAX px, or as
+// much as fits in FOCUS_SHARE of the chart, and squeezes every other book proportionally
+// into the rest, so the whole Bible stays on screen.
+const FOCUS_MAX = 16;
+const FOCUS_SHARE = 0.8;
+const FOCUS_MS = 400;
 const PAD_X = 6;
 const TESTAMENT_GAP = 10;
 const BAR_MAX = 32; // px for the longest chapter (Psalm 119)
 const MAX_DPR = 2; // caps canvas memory on phones
-const MAX_CANVAS_PX = 4e6; // and so does this, per canvas, for the wide zoomed-in chart
 const MIN_ARC_H = 9; // px, so links between neighbouring chapters clear the axis marker
 const NOTES_KEY = 'arcs-notes-hidden';
 
@@ -47,8 +51,15 @@ function readQuery(query, index, minVotes) {
     min: Number.isFinite(min) && min > 0 ? Math.min(MAX_VOTES, Math.max(minVotes, Math.round(min / VOTES_STEP) * VOTES_STEP)) : DEFAULT_VOTES,
     book: index.books.find((b) => b.abbr.toLowerCase() === abbr) ?? null,
     ch: readChapter(params.get('ch'), index),
-    zoom: params.get('zoom') === '1',
+    focus: readFocus(params, index),
   };
+}
+
+// &zoom=Isa: the book zoomed in to. (Older links had zoom=1 with the chapter in &ch=.)
+function readFocus(params, index) {
+  const value = params.get('zoom') ?? '';
+  if (value === '1') return index.chapters[readChapter(params.get('ch'), index)]?.book ?? null;
+  return index.books.find((b) => b.abbr.toLowerCase() === value.toLowerCase()) ?? null;
 }
 
 // "Isa.53" -> chapter index into index.chapters, or -1 if it isn't a real chapter.
@@ -60,11 +71,11 @@ function readChapter(value, index) {
   return book && chapter >= 1 && chapter <= book.chapters ? book.firstChapter + chapter - 1 : -1;
 }
 
-function writeQuery(min, book, zoom, chapter) {
+function writeQuery(min, book, focus, chapter) {
   const params = new URLSearchParams();
   if (min !== DEFAULT_VOTES) params.set('min', String(min));
   if (book) params.set('book', book.abbr);
-  if (zoom) params.set('zoom', '1');
+  if (focus) params.set('zoom', focus.abbr);
   if (chapter) params.set('ch', `${chapter.book.abbr}.${chapter.chapter}`);
   const query = params.toString();
   // Never over another view's URL (e.g. a late event as this view is being replaced).
@@ -135,14 +146,10 @@ function buildChart(figure, hint, index, overview, initial) {
   const count = controlStatus();
   const notesSwitch = toggleSwitch('arcs-notes', !storedNotesHidden());
   const notesToggle = notesSwitch.input;
-  // Phones open on the whole Bible fitted to the screen; this switches to the wider,
-  // sideways-scrolling chart and back. Shown only where the chart would scroll.
-  const zoomButton = h('button', { type: 'button', class: 'arcs-zoom' });
   const controls = controlBar(
     control({ label: 'Minimum votes', for: 'arcs-votes', help: votesHelp(), body: [slider, votesOut] }),
     control({ label: 'Book', for: 'arcs-book', body: bookSelect }),
     control({ label: 'Show notes', for: 'arcs-notes', body: notesSwitch.body }),
-    zoomButton,
     count,
   );
 
@@ -178,7 +185,10 @@ function buildChart(figure, hint, index, overview, initial) {
   // rather than in a popover that would cover them.
   const chapterLine = h('p', { class: 'arcs-chapter' });
   chapterLine.hidden = true;
-  figure.replaceChildren(controls, notesList, chapterLine, scroller, live, legend);
+  // While zoomed in to a book: its name, a way back to the whole Bible, and its neighbours.
+  const focusLine = h('p', { class: 'arcs-focus' });
+  focusLine.hidden = true;
+  figure.replaceChildren(controls, notesList, focusLine, chapterLine, scroller, live, legend);
 
   // --- State ---------------------------------------------------------------------
   let minVotes = initial.min;
@@ -189,14 +199,15 @@ function buildChart(figure, hint, index, overview, initial) {
   let hovered = -1;
   let pinned = false; // selected by tap, keyboard or the URL rather than mouse hover
   let sharedCh = -1; // the pinned chapter as written to the URL
-  let ignoreScroll = false; // the next scroll event is ours (centring a chapter), not the user's
   let inline = false; // the selected chapter is described in chapterLine, not the popover
   let lastPointer = 'mouse';
-  let zoom = initial.zoom; // touch screens: the wide, scrolling chart instead of the fitted one
+  let focus = initial.focus; // the book zoomed in to, or null
+  let animation = 0; // requestAnimationFrame id while the zoom animates
+  let quietFocus = false; // focus moved to the chart by code, not the keyboard
   let notes = []; // see buildNotes
   let note = -1; // the note whose arcs are highlighted
   let notePinned = false; // by a click, tap or the keyboard rather than hover
-  let tapped = null; // fitted chart: the book a tap selected (chapters are too thin to tap)
+  let tapped = null; // the book a tap selected (its chapters are too thin to tap)
   const coarse = () => matchMedia('(pointer: coarse)').matches;
 
   function passes() {
@@ -230,33 +241,51 @@ function buildChart(figure, hint, index, overview, initial) {
     return deg[Math.floor(deg.length * 0.75)] ?? 1;
   }
 
-  function layout() {
-    const narrow = scroller.clientWidth < NARROW;
-    const scrolls = zoom;
-    const W = scrolls ? Math.ceil(2 * PAD_X + TESTAMENT_GAP + N * MIN_TAP) : scroller.clientWidth;
-    const step = (W - 2 * PAD_X - TESTAMENT_GAP) / N;
-    const x = (c) => PAD_X + (c + 0.5) * step + (c >= ntStart ? TESTAMENT_GAP : 0);
-    const arcH = Math.round(Math.min(380, Math.max(scrolls ? 200 : 150, W * 0.33)));
+  // Each chapter's width: equal across the Bible, or, zoomed in, wide for the focused
+  // book and squeezed proportionally everywhere else.
+  function widthsFor(f, W) {
+    const avail = W - 2 * PAD_X - TESTAMENT_GAP;
+    const even = avail / N;
+    if (!f) return new Float64Array(N).fill(even);
+    const wide = Math.max(even, Math.min((avail * FOCUS_SHARE) / f.chapters, FOCUS_MAX));
+    const rest = (avail - wide * f.chapters) / (N - f.chapters);
+    return Float64Array.from({ length: N }, (_, c) => (inBook(c, f) ? wide : rest));
+  }
+
+  // `widths` overrides widthsFor (the in-between frames of the zoom animation).
+  function layout(widths) {
+    const W = scroller.clientWidth;
+    const narrow = W < NARROW;
+    const w = widths ?? widthsFor(focus, W);
+    const left = new Float64Array(N);
+    for (let c = 0, at = PAD_X; c < N; c++) {
+      if (c === ntStart) at += TESTAMENT_GAP;
+      left[c] = at;
+      at += w[c];
+    }
+    const x = (c) => left[c] + w[c] / 2;
+    const arcH = Math.round(Math.min(380, Math.max(150, W * 0.33)));
     const axisY = arcH + 6;
     const barTop = axisY + 2;
     const labelY = barTop + BAR_MAX + 16; // first row of book labels (baseline)
     // The chart is wider than the page column on wide screens; its Testament labels
     // stay inside the column, lined up with the controls above.
-    const columnInset = scrolls ? 0 : controls.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
+    const columnInset = controls.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
     const L = {
       W,
       narrow,
-      scrolls,
       inset: Math.max(PAD_X, columnInset),
-      step,
-      x,
+      w, // chapter widths
+      left, // chapter left edges
+      x, // chapter centres
+      span: (first, last) => [left[first], left[last] + w[last]],
       axisY,
       barTop,
       labelY,
       groupY: labelY + 38, // first group row (baseline)
       H: labelY + 66,
       ry: arcH / ((x(N - 1) - x(0)) / 2), // vertical scale: the widest arc is arcH tall
-      dividerX: x(ntStart) - step / 2 - TESTAMENT_GAP / 2,
+      dividerX: left[ntStart] - TESTAMENT_GAP / 2,
       maxVerses: Math.max(...chapters.map((c) => c.verses)),
     };
     L.labels = placeLabels(L);
@@ -270,7 +299,7 @@ function buildChart(figure, hint, index, overview, initial) {
   function placeLabels(L) {
     const ctx = baseCanvas.getContext('2d');
     ctx.font = labelFont();
-    const span = (first, last) => [L.x(first) - L.step / 2, L.x(last) + L.step / 2];
+    const { span } = L;
 
     // Greedy placement into rows; returns the row used, or -1.
     const fits = (rows, a, z) => rows.findIndex((r) => r.every(([ra, rz]) => z <= ra || a >= rz));
@@ -284,6 +313,7 @@ function buildChart(figure, hint, index, overview, initial) {
       const text = ctx.measureText(b.name).width <= x1 - x0 + 6 ? b.name : index.shortName(b);
       const w = ctx.measureText(text).width;
       const x = centred(x0, x1, w);
+      if (x < x0 || x > x1) continue; // a book squeezed into the chart's edge by a zoom
       const row = fits(bookRows, x - w / 2 - 4, x + w / 2 + 4);
       if (row === -1) continue;
       bookRows[row].push([x - w / 2 - 4, x + w / 2 + 4]);
@@ -308,6 +338,7 @@ function buildChart(figure, hint, index, overview, initial) {
       for (const text of ordered) {
         const w = ctx.measureText(text).width;
         const x = centred(x0, x1, w);
+        if (x < x0 || x > x1) break;
         const textBox = [x - w / 2 - 4, x + w / 2 + 4], bracket = [x0 + 1, x1 - 1];
         const row = [0, 1].find(
           (r) =>
@@ -366,7 +397,7 @@ function buildChart(figure, hint, index, overview, initial) {
   const labelFont = (weight = 400) => `${weight} 12px ${themeColor('--font-ui')}`;
 
   function sizeCanvas(canvas) {
-    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR, Math.sqrt(MAX_CANVAS_PX / (L.W * L.H)));
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
     canvas.width = Math.round(L.W * dpr);
     canvas.height = Math.round(L.H * dpr);
     canvas.style.width = `${L.W}px`;
@@ -445,7 +476,7 @@ function buildChart(figure, hint, index, overview, initial) {
   }
 
   function barRect(c) {
-    const w = Math.max(L.step - (L.step > 2 ? 0.5 : 0), 0.75);
+    const w = Math.max(L.w[c] - (L.w[c] > 2 ? 0.5 : 0), 0.75);
     const hgt = Math.max(1.5, (chapters[c].verses / L.maxVerses) * BAR_MAX);
     return [L.x(c) - w / 2, L.barTop, w, hgt];
   }
@@ -460,7 +491,7 @@ function buildChart(figure, hint, index, overview, initial) {
     // Book boundaries, between the bars and the labels
     ctx.fillStyle = colors.rule;
     for (const b of index.books) {
-      ctx.fillRect(Math.round(L.x(b.firstChapter) - L.step / 2), L.barTop + BAR_MAX + 1, 1, 4);
+      ctx.fillRect(Math.round(L.left[b.firstChapter]), L.barTop + BAR_MAX + 1, 1, 4);
     }
     // Testament divider
     ctx.fillStyle = colors.muted;
@@ -469,7 +500,7 @@ function buildChart(figure, hint, index, overview, initial) {
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'center';
     for (const label of L.labels.books) {
-      const selected = book === label.book;
+      const selected = book === label.book || focus === label.book;
       ctx.font = labelFont(selected ? 700 : 400);
       ctx.fillStyle = selected ? colors.ink : colors.muted;
       ctx.fillText(label.text, label.x, label.y);
@@ -555,7 +586,7 @@ function buildChart(figure, hint, index, overview, initial) {
     ctx.globalAlpha = 1;
     if (tapped) {
       // The book's span on the axis in vermilion.
-      const x0 = L.x(tapped.firstChapter) - L.step / 2, x1 = L.x(tapped.firstChapter + tapped.chapters - 1) + L.step / 2;
+      const [x0, x1] = L.span(tapped.firstChapter, tapped.firstChapter + tapped.chapters - 1);
       ctx.fillStyle = colors.select;
       ctx.fillRect(Math.min(x0, (x0 + x1) / 2 - 3), L.axisY - 1, Math.max(x1 - x0, 6), 2);
       return;
@@ -572,13 +603,13 @@ function buildChart(figure, hint, index, overview, initial) {
 
   // --- Notes ---------------------------------------------------------------------------
   // Two or three things worth seeing, worked out from the arcs currently shown, so
-  // the numbers follow the slider. Hidden while a book is chosen.
+  // the numbers follow the slider. Hidden while a book is chosen or zoomed in to.
   const bookBy = (abbr) => index.books.find((b) => b.abbr === abbr);
   const inBook = (c, b) => c >= b.firstChapter && c < b.firstChapter + b.chapters;
   const bookMid = (b) => b.firstChapter + (b.chapters - 1) / 2;
 
   function buildNotes() {
-    if (book || !notesToggle.checked) return [];
+    if (book || focus || !notesToggle.checked) return [];
     const isNT = (c) => c >= ntStart;
     const sectionOfCh = (c) => chapters[c].book.section;
     const [ps, isa] = [bookBy('Ps'), bookBy('Isa')];
@@ -653,7 +684,7 @@ function buildChart(figure, hint, index, overview, initial) {
   function placeMarkers() {
     markers.replaceChildren(
       ...notes.flatMap((nt, i) =>
-        nt.at.map((c) => h('span', { class: 'arcs-marker-dot', 'data-note': String(i), style: `left: ${L.x(Math.floor(c)) + (c % 1) * L.step}px; top: ${L.axisY - 22}px` }, String(i + 1))),
+        nt.at.map((c) => h('span', { class: 'arcs-marker-dot', 'data-note': String(i), style: `left: ${L.x(Math.floor(c)) + (c % 1) * L.w[Math.floor(c)]}px; top: ${L.axisY - 22}px` }, String(i + 1))),
       ),
     );
   }
@@ -677,34 +708,101 @@ function buildChart(figure, hint, index, overview, initial) {
     renderNotes();
   });
 
-  // --- Zoom (touch screens) ----------------------------------------------------------------
-  // Offered wherever taps are likely; kept while zoomed in (e.g. from a shared link) to zoom out.
-  function updateZoom() {
-    zoomButton.hidden = !(L.narrow || coarse() || zoom);
-    zoomButton.textContent = zoom ? 'Show the whole Bible' : 'Zoom in';
-  }
+  // --- Zoom: focus plus context ----------------------------------------------------------
+  // Zooming in to a book widens it (see widthsFor) without leaving the screen, and arcs
+  // keep joining their chapters' real places. The focus line under the controls names the
+  // book, zooms back out, and moves the zoom to the neighbouring books.
+  const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  zoomButton.addEventListener('click', () => {
-    if (!zoom && tapped) return zoomInTo(tapped);
-    zoom = !zoom;
+  function setFocus(f, { focusStep = 0 } = {}) {
+    const from = L.w;
+    // The button used is about to go; keyboard focus moves to the new line's main button,
+    // or back to the chart when zooming out.
+    const hadFocus = [focusLine, chapterLine].some((line) => line.contains(document.activeElement));
+    // A pinned chapter stays selected (once the zoom has settled).
     const keep = pinned ? hovered : -1;
     const keepInline = inline;
+    clearBook();
     select(-1);
-    relayout();
-    if (keep >= 0) {
-      if (L.scrolls) centre(keep);
-      select(keep, { pin: true, inline: keepInline });
-    } else {
-      scroller.scrollLeft = 0;
+    focus = f;
+    if (note >= 0) setNote(-1);
+    renderNotes();
+    writeQuery(minVotes, book, focus, null);
+    const settle = () => {
+      relayout();
+      if (keep >= 0) select(keep, { pin: true, inline: keepInline });
+    };
+    renderFocusLine(focusStep);
+    if (hadFocus && !focusStep) {
+      if (f) focusLine.querySelector('.arcs-zoom').focus();
+      else {
+        quietFocus = true;
+        scroller.focus({ preventScroll: true });
+        quietFocus = false;
+      }
     }
-    writeQuery(minVotes, book, zoom, chapters[sharedCh]);
-    live.textContent = zoom ? 'Zoomed in. Scroll sideways to move through the chapters.' : 'Showing the whole Bible.';
-  });
+    updateHint();
+    live.textContent = f ? `Zoomed in to ${f.name}. Tap a chapter to see its links.` : 'Showing the whole Bible.';
+    cancelAnimationFrame(animation);
+    const to = widthsFor(focus, scroller.clientWidth);
+    if (reducedMotion()) return settle();
+    // Chapter widths ease from the old layout to the new; each frame redraws the colour
+    // layer only (the dim layer is redrawn once, when needed).
+    const start = performance.now();
+    const frame = (now) => {
+      if (!stack.isConnected) return;
+      const t = Math.min(1, (now - start) / FOCUS_MS);
+      const e = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2; // ease in-out
+      if (t < 1) {
+        L = layout(to.map((w, c) => from[c] + (w - from[c]) * e));
+        drawAll({ dim: false });
+        placeMarkers();
+        animation = requestAnimationFrame(frame);
+      } else {
+        animation = 0;
+        settle();
+      }
+    };
+    animation = requestAnimationFrame(frame);
+  }
 
-  // --- Books (fitted chart, touch) -----------------------------------------------------
-  // Chapters are under MIN_TAP wide there (about 0.3px on phones, 0.8px on tablets), so a
-  // tap selects the whole book, described in the inline line with a button that zooms in
-  // to it, where taps pick chapters.
+  function zoomToButton(b) {
+    const button = h('button', { type: 'button', class: 'arcs-zoom' }, `Zoom in to ${b.name}`);
+    button.addEventListener('click', () => setFocus(b));
+    return button;
+  }
+
+  // A step button keeps keyboard focus on its side (or the other, at either end of the Bible).
+  function stepButtons(b, onStep) {
+    return [-1, 1].flatMap((d) => {
+      const next = index.books[b.index + d];
+      if (!next) return [];
+      const name = index.shortName(next);
+      const button = h('button', { type: 'button', class: 'arcs-step', 'data-step': String(d), 'aria-label': `${d < 0 ? 'Previous' : 'Next'} book: ${next.name}` }, d < 0 ? `‹ ${name}` : `${name} ›`);
+      button.addEventListener('click', () => onStep(next, d));
+      return [button];
+    });
+  }
+  const refocus = (line, d) => d && (line.querySelector(`[data-step="${d}"]`) ?? line.querySelector('.arcs-step'))?.focus();
+
+  function renderFocusLine(focusStep = 0) {
+    focusLine.hidden = !focus || !!tapped;
+    if (!focus) return focusLine.replaceChildren();
+    const out = h('button', { type: 'button', class: 'arcs-zoom' }, 'Show the whole Bible');
+    out.addEventListener('click', () => setFocus(null));
+    const n = focus.chapters;
+    focusLine.replaceChildren(
+      h('strong', {}, focus.name),
+      `: zoomed in to its ${n === 1 ? 'one chapter' : `${n} chapters`}.`,
+      h('span', { class: 'arcs-chapter-actions' }, out, ...stepButtons(focus, (next, d) => setFocus(next, { focusStep: d }))),
+    );
+    refocus(focusLine, focusStep);
+  }
+
+  // --- Books (touch) -----------------------------------------------------------------------
+  // Outside a zoomed-in book chapters are under MIN_TAP wide (about 0.3px on phones,
+  // 0.8px on tablets), so a tap selects the whole book, described in the inline line with
+  // a button that zooms in to it, where taps pick chapters.
   function bookLinks(b) {
     const links = new Set();
     for (let c = b.firstChapter; c < b.firstChapter + b.chapters; c++) for (const l of byChapter[c]) links.add(l);
@@ -712,29 +810,27 @@ function buildChart(figure, hint, index, overview, initial) {
   }
 
   function selectBook(b, { focusStep = 0 } = {}) {
+    if (b === focus) {
+      // Stepped back onto the zoomed-in book: its own line returns.
+      select(-1);
+      clearBook();
+      return refocus(focusLine, focusStep);
+    }
     select(-1);
     if (note >= 0) setNote(-1);
     tapped = b;
+    focusLine.hidden = true;
     const n = bookLinks(b).length;
     const links = n === 0 ? 'no links' : `${n.toLocaleString('en')} ${n === 1 ? 'link' : 'links'}`;
-    const zoomTo = h('button', { type: 'button', class: 'arcs-zoom' }, `Zoom in to ${b.name}`);
-    zoomTo.addEventListener('click', () => zoomInTo(b));
+    const zoomTo = zoomToButton(b);
     // Books of one or two chapters are under a pixel wide, so they're reached by stepping.
-    const step = (d, label) => {
-      const next = index.books[b.index + d];
-      if (!next) return [];
-      const button = h('button', { type: 'button', class: 'arcs-step', 'data-step': String(d), 'aria-label': `${d < 0 ? 'Previous' : 'Next'} book: ${next.name}` }, label(index.shortName(next)));
-      button.addEventListener('click', () => selectBook(next, { focusStep: d }));
-      return [button];
-    };
     chapterLine.replaceChildren(
       h('strong', {}, b.name),
       `: ${links} at ${minVotes}+ votes.`,
-      h('span', { class: 'arcs-chapter-actions' }, zoomTo, ...step(-1, (n) => `‹ ${n}`), ...step(1, (n) => `${n} ›`)),
+      h('span', { class: 'arcs-chapter-actions' }, zoomTo, ...stepButtons(b, (next, d) => selectBook(next, { focusStep: d }))),
     );
     chapterLine.hidden = false;
-    // Stepping keeps focus on the same side's button (or the other, at either end of the Bible).
-    if (focusStep) (chapterLine.querySelector(`[data-step="${focusStep}"]`) ?? chapterLine.querySelector('.arcs-step'))?.focus();
+    refocus(chapterLine, focusStep);
     drawHighlight();
     live.textContent = `${b.name}: ${links}.`;
   }
@@ -743,22 +839,19 @@ function buildChart(figure, hint, index, overview, initial) {
     if (!tapped) return;
     tapped = null;
     chapterLine.hidden = true;
+    focusLine.hidden = !focus;
     drawHighlight();
-  }
-
-  function zoomInTo(b) {
-    clearBook();
-    zoom = true;
-    relayout();
-    centre(Math.round(b.firstChapter + (b.chapters - 1) / 2));
-    writeQuery(minVotes, book, zoom, chapters[sharedCh]);
-    live.textContent = `Zoomed in to ${b.name}. Tap a chapter to see its links.`;
   }
 
   // --- Interaction -------------------------------------------------------------------
   function chapterAtX(px) {
-    const shifted = px > L.dividerX ? px - TESTAMENT_GAP : px;
-    return Math.min(N - 1, Math.max(0, Math.floor((shifted - PAD_X) / L.step)));
+    let lo = 0, hi = N - 1; // the last chapter starting at or before px
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (L.left[mid] <= px) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo === ntStart - 1 && px > L.dividerX ? ntStart : lo; // the gap goes to the nearer side
   }
 
   // A pinned chapter is kept in the URL (&ch=Isa.53); hover isn't.
@@ -767,7 +860,7 @@ function buildChart(figure, hint, index, overview, initial) {
     const ch = pinned && hovered >= 0 ? hovered : -1;
     if (ch === sharedCh) return;
     sharedCh = ch;
-    writeQuery(minVotes, book, zoom, chapters[ch]);
+    writeQuery(minVotes, book, focus, chapters[ch]);
   }
 
   function selectChapter(c, { pin = false, announce = false, inline: inlineNote = false } = {}) {
@@ -802,6 +895,7 @@ function buildChart(figure, hint, index, overview, initial) {
         h('strong', {}, index.chapterLabel(ch)),
         `: ${links.toLowerCase()} at ${minVotes}+ votes${book ? ` touching ${book.name}` : ''}. `,
         h('a', { href: `#/verse/${index.osis(ch.firstId)}` }, `Read ${index.chapterLabel(ch)}`),
+        ...(ch.book === focus ? [] : [' ', zoomToButton(ch.book)]),
       );
     } else {
       showPreview(marker, index.chapterLabel(ch), message);
@@ -829,7 +923,9 @@ function buildChart(figure, hint, index, overview, initial) {
   // tap selects it and a second tap on the same chapter opens it.
   stack.addEventListener('click', (e) => {
     const c = chapterAtX(e.clientX - stack.getBoundingClientRect().left);
-    if (lastPointer === 'touch' && L.step < MIN_TAP) return selectBook(chapters[c].book);
+    // Taps in a zoomed-in book pick chapters, however narrow (Psalms on a phone).
+    const b = chapters[c].book;
+    if (lastPointer === 'touch' && b !== focus && L.w[c] < MIN_TAP) return selectBook(b);
     // With a note's arcs showing, the first click switches to the chapter's arcs.
     if (notePinned) return select(c, { pin: lastPointer === 'touch' });
     if (lastPointer === 'touch' && !(pinned && c === hovered)) select(c, { pin: true });
@@ -838,25 +934,18 @@ function buildChart(figure, hint, index, overview, initial) {
   // Tapping outside the chart clears a tapped selection.
   const onDocPointer = (e) => {
     if (!stack.isConnected) return document.removeEventListener('pointerdown', onDocPointer);
-    if ((pinned || tapped) && !stack.contains(e.target) && !e.target.closest?.('.preview, .arcs-chapter, .arcs-zoom')) select(-1);
+    if ((pinned || tapped) && !stack.contains(e.target) && !e.target.closest?.('.preview, .arcs-chapter, .arcs-focus')) select(-1);
   };
   document.addEventListener('pointerdown', onDocPointer);
-  // The popover is positioned for the current scroll, so drop it when the chart scrolls.
-  scroller.addEventListener('scroll', () => {
-    if (ignoreScroll) return void (ignoreScroll = false);
-    // (The inline description doesn't depend on scroll position, so it stays.)
-    if (hovered >= 0 && !inline && document.activeElement !== scroller) select(-1);
-  });
 
   // Keyboard: arrows move by chapter, Page Up/Down by book, Enter reads.
   scroller.addEventListener('focus', () => {
     // Only for keyboard focus; a click also focuses the scroller.
-    if (hovered < 0 && scroller.matches(':focus-visible')) select(book?.firstChapter ?? 0, { pin: true, announce: true });
+    if (hovered < 0 && !quietFocus && scroller.matches(':focus-visible')) select(book?.firstChapter ?? 0, { pin: true, announce: true });
   });
-  // (Zooming keeps the chapter, so focus moving to the zoom button doesn't clear it,
-  // and a tapped book stays until a tap elsewhere.)
+  // (A tapped book stays until a tap elsewhere.)
   // (Opening a chapter removes the focused chart, which also blurs it: nothing to clear then.)
-  scroller.addEventListener('blur', (e) => scroller.isConnected && e.relatedTarget !== zoomButton && !tapped && select(-1));
+  scroller.addEventListener('blur', () => scroller.isConnected && !tapped && select(-1));
   scroller.addEventListener('keydown', (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     let c = Math.max(hovered, 0);
@@ -886,15 +975,8 @@ function buildChart(figure, hint, index, overview, initial) {
         return;
     }
     e.preventDefault();
-    scrollIntoView(c);
     select(c, { pin: true, announce: true });
   });
-
-  function scrollIntoView(c) {
-    const x = L.x(c), margin = 48;
-    if (x < scroller.scrollLeft + margin) scroller.scrollLeft = x - margin;
-    else if (x > scroller.scrollLeft + scroller.clientWidth - margin) scroller.scrollLeft = x - scroller.clientWidth + margin;
-  }
 
   // While the slider is dragged the count updates on every input, but the arcs
   // redraw at most once per frame: a frame is only requested when none is pending,
@@ -934,12 +1016,12 @@ function buildChart(figure, hint, index, overview, initial) {
   slider.addEventListener('change', () => {
     minVotes = Number(slider.value);
     redraw({ final: true });
-    writeQuery(minVotes, book, zoom, chapters[sharedCh]);
+    writeQuery(minVotes, book, focus, chapters[sharedCh]);
   });
   bookSelect.addEventListener('change', () => {
     book = bookSelect.value === '' ? null : index.books[Number(bookSelect.value)];
     redraw({ final: true });
-    writeQuery(minVotes, book, zoom, chapters[sharedCh]);
+    writeQuery(minVotes, book, focus, chapters[sharedCh]);
   });
 
   const onTheme = () => {
@@ -948,7 +1030,7 @@ function buildChart(figure, hint, index, overview, initial) {
   };
   window.addEventListener('themechange', onTheme);
 
-  // Re-layout when the available width changes (only matters when the chart fits the page).
+  // Re-layout when the available width changes.
   let resizeTimer;
   const observer = new ResizeObserver(() => {
     if (!stack.isConnected) return observer.disconnect();
@@ -960,8 +1042,7 @@ function buildChart(figure, hint, index, overview, initial) {
         select(-1);
         return relayout();
       }
-      // The zoomed-in chart has a fixed width; the fitted one follows the page.
-      if (L.scrolls || Math.abs(scroller.clientWidth - L.W) < 2) return;
+      if (animation || Math.abs(scroller.clientWidth - L.W) < 2) return;
       select(-1);
       relayout();
     }, 150);
@@ -972,15 +1053,12 @@ function buildChart(figure, hint, index, overview, initial) {
     drawAll();
     placeMarkers();
     updateHint();
-    updateZoom();
   }
 
   function updateHint() {
     hint.textContent = !L.narrow && !coarse()
       ? 'Hover over a chapter to see its links, and click to read it.'
-      : L.step >= MIN_TAP
-        ? 'Scroll sideways to move through the Bible. Tap a chapter to see its links, and tap it again to read it.'
-        : 'Tap a book to see its links, then zoom in to it to pick single chapters.';
+      : 'Tap a book to see its links, then zoom in to it: the book widens so you can tap a chapter to see its links, and tap it again to read it.';
   }
 
   filter();
@@ -989,22 +1067,13 @@ function buildChart(figure, hint, index, overview, initial) {
   drawAll();
   drawnKey = filterKey();
   updateHint();
-  updateZoom();
+  renderFocusLine();
   observer.observe(scroller);
 
   // A chapter in the URL (e.g. from a verse's "See this chapter on the arc diagram")
-  // starts highlighted, centred if the chart scrolls.
+  // starts highlighted.
   if (initial.ch >= 0) {
-    centre(initial.ch);
     // Phones describe it inline; wider screens use the popover.
     select(initial.ch, { pin: true, announce: true, inline: L.narrow });
-  }
-
-  function centre(c) {
-    const target = Math.max(0, Math.round(L.x(c) - scroller.clientWidth / 2));
-    if (scroller.scrollWidth > scroller.clientWidth && target !== scroller.scrollLeft) {
-      ignoreScroll = true;
-      scroller.scrollLeft = target;
-    }
   }
 }
