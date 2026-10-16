@@ -53,6 +53,56 @@ test.describe('Verse', () => {
     await expect.poll(() => page.evaluate(() => location.hash)).toBe(href);
     await expect(page.locator('h1')).not.toContainText('John 3:16');
   });
+
+  test('a reference in the lists and its dot in the graph light each other up', async ({ page, context }) => {
+    await skipWelcome(context);
+    await page.goto('#/verse/John.3.16');
+    const dot = page.locator('svg.graph .graph-node', { hasText: 'Rom 5:8' });
+    // Romans 5:8 is in both lists; each lights only its own direction's edge.
+    await page.locator('#refs-out-list .ref-link', { hasText: 'Romans 5:8' }).hover();
+    await expect(dot).toHaveClass(/is-hot/);
+    await expect(page.locator('.graph-edge.is-hot')).toHaveCount(1);
+    await page.locator('#refs-in-list .ref-link', { hasText: 'Mark 16:16' }).focus();
+    await expect(dot).not.toHaveClass(/is-hot/);
+    await expect(page.locator('svg.graph .graph-node', { hasText: 'Mark 16:16' })).toHaveClass(/is-hot/);
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => document.activeElement.blur());
+    await expect(page.locator('.graph-node.is-hot')).toHaveCount(0);
+    // And from the graph: both rows for Romans 5:8 (one per list).
+    await dot.hover();
+    await expect(page.locator('li.is-linked')).toHaveCount(2);
+    await page.mouse.move(0, 0);
+    await expect(page.locator('li.is-linked')).toHaveCount(0);
+  });
+
+  test('from 1100px the verse and graph share a sticky column beside the lists', async ({ page, context }) => {
+    await skipWelcome(context);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('#/verse/John.3.16');
+    await expect(page.locator('.graph-section .legend')).toBeVisible();
+    const main = page.locator('.verse-main');
+    await expect(main).toHaveClass(/is-sticky/);
+    const [m, g, lists] = await Promise.all(['.verse-main', 'svg.graph', '.margin-column'].map((s) => page.locator(s).boundingBox()));
+    expect(g.y).toBeGreaterThan(m.y); // the graph under the verse, in the same column
+    expect(lists.x).toBeGreaterThan(m.x + m.width - 1); // the lists to the right
+    // Scrolling the lists keeps the column pinned 24px from the top.
+    await page.getByRole('button', { name: 'Show all 104' }).click();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
+    await expect.poll(() => main.evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBe(24);
+    // In a short window it no longer fits, so it scrolls with the page.
+    await page.setViewportSize({ width: 1440, height: 500 });
+    await expect(main).not.toHaveClass(/is-sticky/);
+  });
+
+  test('below 1100px the view stacks: verse, references, graph', async ({ page, context }) => {
+    await skipWelcome(context);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('#/verse/John.3.16');
+    await expect(page.locator('.graph-section .legend')).toBeVisible();
+    const ys = await Promise.all(['.verse-text', '.margin-column', 'svg.graph'].map(async (s) => (await page.locator(s).boundingBox()).y));
+    expect(ys).toEqual([...ys].sort((a, b) => a - b));
+    await expect(page.locator('.verse-main')).not.toHaveClass(/is-sticky/);
+  });
 });
 
 test.describe('Arcs', () => {

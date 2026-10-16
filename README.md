@@ -10,8 +10,8 @@ The site has four views:
 ### Verse explorer
 
 Look up any verse ("John 3:16", "1 jn 4 8"). The verse sits in a reading column with its
-references in the margin, as in a printed reference Bible, next to a graph of its 15 strongest
-connections arranged in canonical order.
+references in the margin, as in a printed reference Bible, above a graph of its 15 strongest
+connections arranged round a circle in canonical order. Hovering a reference lights it up in the graph.
 
 [![The Verse view for John 3:16](docs/screenshots/verse.png)](https://ryan2706.github.io/bible-xref/#/verse/John.3.16)
 

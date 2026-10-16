@@ -87,7 +87,7 @@ function booksSvg({ books, matrix }) {
 }
 
 // Verse explorer: John 3:16 and the same strongest links as its connections graph, with
-// the same radial layout (canonical order round an ellipse), scaled to fit. No labels.
+// the same radial layout (canonical order round a circle), scaled to fit. No labels.
 function graphSvg({ centerId, out, incoming, isNT, books }) {
   const W = 400, H = 300, R = 9, R_CENTER = 14;
   const links = strongestLinks(out, incoming);
@@ -96,15 +96,15 @@ function graphSvg({ centerId, out, incoming, isNT, books }) {
     ids.map((id) => ({ id, labelWidth: 0 })),
     { width: W, maxHeight: H, ntStart: books.find((b) => b.testament === 'NT').firstId, lastId: books.at(-1).lastId, r: R, rCenter: R_CENTER, labelHeight: 0, dotPad: 6, maxRadius: 400 },
   );
-  // Scale the ellipse (plus node radius) to fill the thumbnail.
-  const k = Math.min((W / 2 - R - 4) / L.rx, (H / 2 - R - 4) / L.ry);
+  // Scale the circle (plus node radius) to fill the thumbnail's height, the verse at its centre.
+  const k = (H / 2 - R - 4) / L.radius;
   const px = (x) => (W / 2 + (x - L.cx) * k).toFixed(1), py = (y) => (H / 2 + (y - L.cy) * k).toFixed(1);
   const at = new Map(ids.map((id, i) => [id, L.nodes[i]]));
   const maxVotes = Math.max(1, ...links.map((l) => l.votes));
 
   const arc = (a, b) => {
-    const pt = (t) => `${px(L.cx + L.rx * Math.sin(t))},${py(L.cy - L.ry * Math.cos(t))}`;
-    return `M${pt(a)} A${(L.rx * k).toFixed(1)},${(L.ry * k).toFixed(1)} 0 0 1 ${pt(b)}`;
+    const pt = (t) => `${px(L.cx + L.radius * Math.sin(t))},${py(L.cy - L.radius * Math.cos(t))}`;
+    return `M${pt(a)} A${(L.radius * k).toFixed(1)},${(L.radius * k).toFixed(1)} 0 0 1 ${pt(b)}`;
   };
   let body = `<path class="g-guide-ot" d="${arc(-SPAN, -SPLIT)}"/><path class="g-guide-nt" d="${arc(SPLIT, SPAN)}"/>`;
   body += '<g class="g-edge">';

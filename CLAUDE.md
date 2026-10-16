@@ -63,9 +63,13 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   use it) from `src/sections.js`, which has
   no DOM code so the data build can import it too. Likewise `src/links.js` (`strongestLinks`: the 15 verses a verse's
   graph draws, up to 8 it references and 7 that reference it by votes, unused places going to the other side; a
-  verse linked both ways takes one place and keeps both links) and `src/graph-layout.js` (`radialLayout`: places those verses round an ellipse in canonical order,
-  Genesis lower left, OT up the left, NT down the right, Revelation lower right, nudging crowded nodes apart in
-  order until no label overlaps; labels outside the ellipse, edges inside) are shared by `verse-graph.js` and the
+  verse linked both ways takes one place and keeps both links) and `src/graph-layout.js` (`radialLayout`: places those verses round a true circle, centred across the
+  graph with the verse at its centre, as large as the width (labels on both sides) and `maxHeight` allow, in
+  canonical order: Genesis lower left, OT up the left, NT down the right, Revelation lower right, each verse kept on
+  its testament's half and never shifted or squashed when the links are one-sided; it nudges crowded nodes apart in
+  order (balancing pushes, then sweeps for long jams) until no label overlaps, and reports any that still do in
+  `clashing`; labels outside the circle, edges inside; "Genesis" and "Revelation" hang from ticks dropped from the
+  ends, on their own row under the gap, where no verse label reaches) are shared by `verse-graph.js` and the
   thumbnail build.
 - `src/dom.js`: `h(tag, attrs, ...children)`. Children are set as text, never parsed as HTML.
 - `src/view-header.js`: `viewHeader(title, intro, howTo)` returns `{ header, title, guide }`: the h1, a one-sentence
@@ -97,13 +101,22 @@ Shared modules. Reuse these in new views instead of re-implementing them.
   lazy-load `search.json`).
 - `src/views/`: `verse.js` (the verse text and the cross-references load independently, and a failed one shows
   `loadError(message, retry)`, an error with a Retry button, in its own place while the other stays; the h1 reads
-  "Loading…" until books.json is in, never a hand-formatted reference; reading + margin columns, and from 1100px a third, sticky column for the graph, sized
-  to fit the window; below 1100px the graph sits under the text; the legend lists only the kinds of mark the graph
+  "Loading…" until books.json is in, never a hand-formatted reference; the verse text and the graph sit in
+  `.verse-main`, which is `display: contents` below 1100px (text and graph left, lists in the margin column right; below
+  720px text, lists, graph) and from 1100px the left column, the reference lists in a narrow right column; there it
+  gets `.is-sticky` while it fits in the window, and the graph takes the verse text's reading width (`--measure`) and
+  left edge, and the height the text leaves under the sticky top, shrinking down to `MIN_GRAPH` (260px) so the column
+  stays sticky on laptop screens (1366×768); a verse too long for that gets a graph sized to the window and the column
+  scrolls; the graph redraws
+  when the column's width, the window's height or the text above it changes; hovering or focusing a reference in the
+  lists lights up its dot and that direction's edge in the graph (`linker`), and hovering a dot lights up its rows;
+  the legend lists only the kinds of mark the graph
   draws; a first-visit welcome band, dismissal kept in
   localStorage `welcome-dismissed`; previous/next verse buttons, also ← and → keys; a link to the chapter on
   the arc diagram), `verse-graph.js` (radial SVG graph from `radialLayout`: edges thick by votes with
-  an arrowhead 70% of the way out, a node's edges darken on hover/focus, labels hidden until hover only if they
-  can't all fit), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
+  an arrowhead 70% of the way out, a node's edges darken and its dot gets a ring on hover/focus, also driven from
+  outside by the returned `highlight(id, dir)`, with `onHighlight(id)` reporting graph hovers; if the labels can't all fit, the
+  lowest-voted label still overlapping is hidden until hover, one at a time until none overlap), `arcs.js` (chapter arc diagram: stacked colour / dim / highlight
   canvases, so hover only redraws the highlight layer; filters in `#/arcs?min=30&book=Isa`, and `&ch=Isa.53`
   starts with that chapter highlighted and keeps the pinned chapter in the URL; below 720px that chapter is described
   in an inline line under the controls instead of the popover; the hover/tap hint is in "How to read this"; up to
@@ -137,13 +150,17 @@ Shared modules. Reuse these in new views instead of re-implementing them.
 - Tests (`tests/`, `@playwright/test`, config in `playwright.config.js`): `tests/fixtures.js` exports a `test`
   that fails on any console error or uncaught exception, and `skipWelcome(context)`; import `test`/`expect` from
   it, not from `@playwright/test`. `smoke.spec.js` covers each view's main paths and shared URLs (search, verse
-  steps across Malachi → Matthew, graph dots, Arcs `?ch=`/`?book=`/`?min=`, Books opening on Isaiah and `?pair=`,
+  steps across Malachi → Matthew, graph dots, list ↔ graph highlighting, the sticky two-column layout from 1100px and
+  the stacked order at 390px, Arcs `?ch=`/`?book=`/`?min=`, Books opening on Isaiah and `?pair=`,
   About's thumbnails, every view in both themes). Label checks: in dev, `books.js` and `arcs.js` also verify after
   every layout that each label sits inside its own section, log a console error if not, and put the result on
   `window.__labelCheck`. `books-labels.spec.js` measures the rendered Books labels at 4 widths, both themes,
-  self-links on/off. `graph-labels.spec.js` checks that no verse-graph label touches an edge, arrowhead, node or
-  other label, for 11 verses at 6 widths in both themes ("John 10:28" in John 3:16, "Rom 5:10" in Rom 5:6 and
-  "1 Tim 1:15" in Luke 19:10 must stay visible). Both have a negative control that must be flagged.
+  self-links on/off. `graph-labels.spec.js` checks that no verse-graph label touches an edge, arrowhead, node,
+  other label or end tick, or sits beside "Genesis"/"Revelation" (on their row within 24px), that those marks touch
+  no edge, node or each other, that no two dots overlap, and that the graph is a true circle centred on the verse, for 11 verses at 6 widths
+  in both themes ("John 10:28" in John 3:16, "Rom 5:10" in Rom 5:6 and "1 Tim 1:15" in Luke 19:10 must stay
+  visible, except 1 Tim 1:15 at 390px, where one half of the circle can't hold all its graph's labels). Both have a negative control that must be flagged (the graph test two: a label on an edge, and
+  "Revelation" beside a verse label).
   `arcs-zoom.spec.js` covers the Arcs zoom at 390, 768 and 1024px with touch (Psalms, Jude, previous/next,
   the keyboard, the animation and reduced motion) and the chapter chips (Psalms and Isaiah at 390px, Psalms at 768px), placing taps with `chapterPoint()` from `arcs-helpers.js`, which
   mirrors the chart's geometry (update it if `PAD_X`, `TESTAMENT_GAP` or the focus constants change).
@@ -258,8 +275,10 @@ Type:
   Verse references (`.ref-link`, popover titles, verse steps) are set in Newsreader.
 
 Layout: the verse view is a reading column (~36rem) with a margin column of
-references beside it, like a printed reference Bible. Below ~720px the margin column
-moves under the verse text. Content is left-aligned to the header.
+references beside it, like a printed reference Bible. From 1100px the left column also holds
+the connections graph under the verse, sized to the column, and stays in view (sticky) while
+the reference lists scroll. Below ~720px the margin column moves under the verse text.
+Content is left-aligned to the header.
 
 Palette (all chart colours pass the dataviz validator: lightness band, chroma, CVD
 separation, normal-vision floor, ≥3:1 against the background):

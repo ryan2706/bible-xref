@@ -33,7 +33,9 @@ export async function renderVerse(container, [ref]) {
     h('p', { class: 'status' }, 'Loading cross-references…'),
   );
   const graph = h('section', { class: 'graph-section', 'aria-labelledby': 'graph-title' });
-  container.replaceChildren(...welcomeBand(title), header, h('div', { class: 'verse-layout' }, reading, margin, graph));
+  // From 1100px the verse and its graph share the left column (see renderGraphSection).
+  const main = h('div', { class: 'verse-main' }, reading, graph);
+  container.replaceChildren(...welcomeBand(title), header, h('div', { class: 'verse-layout' }, main, margin));
 
   let books;
   try {
@@ -101,8 +103,9 @@ export async function renderVerse(container, [ref]) {
     }
     if (!title.isConnected) return;
     const { out, in: incoming } = xrefs.verses[verse.id - xrefs.firstId];
-    renderMargin(margin, out, incoming, index);
-    return renderGraphSection(graph, verse.id, out, incoming, index);
+    const link = linker(margin);
+    renderMargin(margin, out, incoming, index, link);
+    return renderGraphSection(graph, verse.id, out, incoming, index, link);
   };
   await Promise.all([showText(), showRefs()]);
 }
@@ -118,11 +121,37 @@ function loadError(message, retry) {
   return box;
 }
 
-function renderMargin(margin, out, incoming, index) {
+// Hovering or focusing a verse in the reference lists lights it up in the graph (its dot
+// and the edge in that list's direction), and hovering one in the graph lights up its rows.
+function linker(margin) {
+  let graph = null;
+  let from = null; // the list link that lit the graph, so another's leave/blur can't clear it
+  return {
+    setGraph(g) {
+      graph = g;
+    },
+    fromList(id, dir, link) {
+      this.fromGraph(null); // a verse still lit from the graph gives way
+      from = link;
+      graph?.highlight(id, dir);
+    },
+    clearList(link) {
+      if (from !== link) return;
+      from = null;
+      graph?.highlight(null);
+    },
+    fromGraph(id) {
+      for (const li of margin.querySelectorAll('li.is-linked')) li.classList.remove('is-linked');
+      if (id !== null) for (const li of margin.querySelectorAll(`li[data-id="${id}"]`)) li.classList.add('is-linked');
+    },
+  };
+}
+
+function renderMargin(margin, out, incoming, index, link) {
   margin.removeAttribute('aria-busy');
   margin.replaceChildren(
-    refGroup('refs-out', 'References', out, (l) => [l[1], l[2]], 'This verse doesn’t reference any others.', index),
-    refGroup('refs-in', 'Referenced by', incoming, (l) => [l[0], l[0]], 'No verses reference this one.', index),
+    refGroup('refs-out', 'References', out, (l) => [l[1], l[2]], 'This verse doesn’t reference any others.', index, link, 'out'),
+    refGroup('refs-in', 'Referenced by', incoming, (l) => [l[0], l[0]], 'No verses reference this one.', index, link, 'in'),
   );
   // The "?" explaining votes goes by the first "Sorted by votes" on the page.
   margin.querySelector('.ref-note')?.append(' ', votesHelp());
@@ -234,7 +263,7 @@ function verseNav(verse, index, title) {
 }
 
 // One list of references, top 10 first, with a toggle to show the rest.
-function refGroup(id, heading, links, target, emptyText, index) {
+function refGroup(id, heading, links, target, emptyText, index, lit, dir) {
   const section = h('section', { class: 'ref-group', 'aria-labelledby': `${id}-title` });
   section.append(
     h('h2', { id: `${id}-title` }, heading, h('span', { class: 'ref-count' }, ` ${links.length}`)),
@@ -251,9 +280,11 @@ function refGroup(id, heading, links, target, emptyText, index) {
     const name = index.rangeLabel(start, end);
     const a = h('a', { href: `#/verse/${index.osis(start)}`, class: 'ref-link' }, name);
     attachPreview(a, index, start, name);
+    for (const type of ['mouseenter', 'focus']) a.addEventListener(type, () => lit.fromList(start, dir, a));
+    for (const type of ['mouseleave', 'blur']) a.addEventListener(type, () => lit.clearList(a));
     return h(
       'li',
-      { class: votes === 0 ? 'is-faint' : '' },
+      { class: votes === 0 ? 'is-faint' : '', 'data-id': start },
       a,
       votesEl(votes),
     );
@@ -274,40 +305,66 @@ function refGroup(id, heading, links, target, emptyText, index) {
   return section;
 }
 
-// From 1100px the graph sits in its own column, sticky beside the text and references,
-// so it is sized to fit in the window.
+// From 1100px the verse and its graph share the left column, beside the reference lists.
+// The column is sticky while it fits in the window, so the graph is sized to fit under the
+// verse text there; if the text leaves too little room, the column scrolls normally.
 const SIDE_BY_SIDE = '(min-width: 1100px)';
+const STICKY_TOP = 24; // .verse-main.is-sticky top, 1.5rem
+const MIN_GRAPH = 260; // about the shortest graph that holds a full set of dots, labels and end marks
 
-async function renderGraphSection(section, centerId, out, incoming, index) {
+async function renderGraphSection(section, centerId, out, incoming, index, link) {
   const holder = h('div', { class: 'graph-holder' });
+  const main = section.closest('.verse-main');
   section.replaceChildren(h('h2', { id: 'graph-title' }, 'Connections'), holder);
   // Labels are measured for the layout, so wait for the web fonts first.
   await document.fonts.ready;
   if (!holder.isConnected) return;
+  const sideBySide = () => window.matchMedia(SIDE_BY_SIDE).matches;
+  const size = () => {
+    const legendRoom = (section.querySelector('.legend')?.offsetHeight ?? 56) + 16;
+    // Never taller than the window, wherever it sits.
+    const fitWindow = window.innerHeight - STICKY_TOP - legendRoom;
+    if (!sideBySide()) return { width: holder.clientWidth, maxHeight: fitWindow };
+    // Pinned at the top of the window, the graph gets what the text and heading leave.
+    const above = holder.getBoundingClientRect().top - main.getBoundingClientRect().top;
+    const room = fitWindow - above;
+    return { width: holder.clientWidth, maxHeight: room >= MIN_GRAPH ? room : fitWindow };
+  };
+  const updateSticky = () => main.classList.toggle('is-sticky', sideBySide() && main.offsetHeight + STICKY_TOP <= window.innerHeight);
+  let drawn;
   const draw = () => {
-    const sticky = window.matchMedia(SIDE_BY_SIDE).matches;
-    // Room left in the window under the sticky top offset, heading and legend.
-    const maxHeight = sticky ? Math.max(360, window.innerHeight - (holder.offsetTop - section.offsetTop) - 96) : Infinity;
-    return renderGraph(holder, { centerId, out, incoming, index, maxHeight });
+    drawn = size();
+    const result = renderGraph(holder, { centerId, out, incoming, index, ...drawn, onHighlight: (id) => link.fromGraph(id) });
+    link.setGraph(result || null);
+    return result;
   };
   const kinds = draw();
   if (!kinds) {
     holder.replaceWith(h('p', { class: 'status' }, 'This verse has no cross-references to draw.'));
     return;
   }
-  // Redraw when the column width changes noticeably (rotation, window resize).
-  let drawnWidth = holder.clientWidth;
+  // Redraw when the room changes noticeably: the column's width (rotation, resizing), the
+  // window's height, or the text above the graph (the verse text loading, say).
   let timer;
-  const observer = new ResizeObserver(() => {
-    if (!holder.isConnected) return observer.disconnect();
-    if (Math.abs(holder.clientWidth - drawnWidth) < 24) return;
+  const check = () => {
+    if (!holder.isConnected) {
+      observer.disconnect();
+      window.removeEventListener('resize', later);
+      return;
+    }
+    const next = size();
+    const changed = (a, b) => Math.abs(a - b) >= 24 || (a === Infinity) !== (b === Infinity);
+    if (changed(next.width, drawn.width) || changed(next.maxHeight, drawn.maxHeight)) draw();
+    updateSticky();
+  };
+  const later = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => {
-      drawnWidth = holder.clientWidth;
-      draw();
-    }, 150);
-  });
+    timer = setTimeout(check, 150);
+  };
+  const observer = new ResizeObserver(later);
   observer.observe(holder);
+  observer.observe(main.querySelector('.reading-column'));
+  window.addEventListener('resize', later);
   // Only the kinds of mark this graph actually draws.
   section.append(
     legend([
@@ -319,6 +376,8 @@ async function renderGraphSection(section, centerId, out, incoming, index) {
       kinds.faint && [arrowSwatch('faint'), 'No votes yet'],
     ]),
   );
+  // Sized with a guess at the legend's height; now it is in, check again.
+  check();
 }
 
 // A tiny edge for the legend: from this verse (out), into it (in), or dashed (faint).

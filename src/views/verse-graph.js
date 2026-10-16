@@ -1,6 +1,6 @@
 // Radial graph of a verse and its strongest cross-references (SVG; at most 16 nodes).
 // Linked verses sit around the verse in canonical order (see src/graph-layout.js), labels
-// outside the ellipse and edges inside it. Colours come from CSS tokens, so theme changes
+// outside the circle and edges inside it. Colours come from CSS tokens, so theme changes
 // need no redraw.
 import { scaleSqrt } from 'd3';
 import { attachPreview } from '../preview.js';
@@ -13,7 +13,7 @@ const R = 8; // node radius
 const R_CENTER = 13;
 const LABEL_GAP = 5; // between a node and its label
 const LABEL_HEIGHT = 15;
-const LABELLED_WHEN_BUSY = 8;
+const END_LABEL_HEIGHT = 13; // "Genesis" and "Revelation" are 11px
 
 const svg = (tag, attrs = {}) => {
   const el = document.createElementNS(SVG_NS, tag);
@@ -66,17 +66,19 @@ function edgeShape(c, p, bow, toNode, width) {
   return { d, arrow };
 }
 
-// A stretch of the ellipse, clockwise from angle a to angle b.
-function ellipseArc(L, a, b) {
-  const pt = (t) => `${L.cx + L.rx * Math.sin(t)},${L.cy - L.ry * Math.cos(t)}`;
-  return `M${pt(a)} A${L.rx},${L.ry} 0 ${b - a > Math.PI ? 1 : 0} 1 ${pt(b)}`;
+// A stretch of the circle, clockwise from angle a to angle b.
+function circleArc(L, a, b) {
+  const pt = (t) => `${L.cx + L.radius * Math.sin(t)},${L.cy - L.radius * Math.cos(t)}`;
+  return `M${pt(a)} A${L.radius},${L.radius} 0 ${b - a > Math.PI ? 1 : 0} 1 ${pt(b)}`;
 }
 
 /**
  * Draws the graph into container. Returns false if the verse has no links, otherwise
- * which kinds of mark were drawn ({ ot, nt, out, in, faint }) for the legend.
+ * which kinds of mark were drawn ({ ot, nt, out, in, faint }) for the legend, and
+ * highlight(id, dir) to light up a verse from outside. onHighlight(id or null) is called
+ * when a verse is hovered or focused in the graph.
  */
-export function renderGraph(container, { centerId, out, incoming, index, maxHeight = Infinity }) {
+export function renderGraph(container, { centerId, out, incoming, index, maxHeight = Infinity, onHighlight }) {
   const { nodes, edges } = buildGraph(centerId, out, incoming, index);
   container.replaceChildren();
   if (edges.length === 0) return false;
@@ -98,7 +100,7 @@ export function renderGraph(container, { centerId, out, incoming, index, maxHeig
   root.append(guide, edgeLayer, nodeLayer);
 
   // Each node is an SVG link, so it is focusable and opens with Enter or a click.
-  // Links follow canonical order, so Tab moves round the ellipse from Genesis to Revelation.
+  // Links follow canonical order, so Tab moves round the circle from Genesis to Revelation.
   nodes.sort((a, b) => a.id - b.id);
   const nodeEls = nodes.map((n) => {
     n.testament = index.testament(n.id) === 'OT' ? 'ot' : 'nt';
@@ -117,7 +119,7 @@ export function renderGraph(container, { centerId, out, incoming, index, maxHeig
   center.append(svg('circle', { r: R_CENTER }), centerText);
   nodeLayer.append(center);
   const endTexts = ['Genesis', 'Revelation'].map((name) => {
-    const t = svg('text', { class: 'graph-end', 'text-anchor': 'middle', 'dominant-baseline': 'central' });
+    const t = svg('text', { class: 'graph-end', 'dominant-baseline': 'central' });
     t.textContent = name;
     guide.append(t);
     return t;
@@ -136,42 +138,46 @@ export function renderGraph(container, { centerId, out, incoming, index, maxHeig
   const options = {
     width,
     maxHeight,
+    maxRadius: width / 2, // as large as the column and maxHeight allow
     ntStart,
     lastId,
     r: R,
     rCenter: R_CENTER,
     labelGap: LABEL_GAP,
     labelHeight: LABEL_HEIGHT,
-    // A narrow column has height to spare, so the ellipse may grow taller to fit every label.
-    maxAspect: width < 480 ? 2.4 : 1.6,
+    endLabelHeight: END_LABEL_HEIGHT,
     centerLabel: { width: Math.ceil(centerText.getComputedTextLength()), height: LABEL_HEIGHT },
     endLabels: endTexts.map((t) => Math.ceil(t.getComputedTextLength())),
   };
   const layoutWith = () => radialLayout(nodes.map((n) => ({ id: n.id, labelWidth: n.showLabel ? n.labelWidth : 0, bothWays: n.dirs.size === 2 })), options);
   let L = layoutWith();
-  // If the labels can't all fit, keep only the top nodes' labels, fewer until they fit;
-  // the rest appear on hover/focus.
-  const byVotes = [...nodes].sort((a, b) => b.votes - a.votes);
-  for (let keep = LABELLED_WHEN_BUSY; L.overlapCount > 0 && keep >= 0; keep--) {
-    const kept = new Set(byVotes.slice(0, keep));
-    nodes.forEach((n, i) => {
-      n.showLabel = kept.has(n);
-      nodeEls[i].classList.toggle('label-on-demand', !n.showLabel);
-    });
+  // If the labels can't all fit (half the circle holds only so many), hide the label with
+  // the fewest votes among those still overlapping, until none do; hidden labels appear on
+  // hover/focus. If only unlabelled dots still overlap, labels elsewhere on their half are
+  // crowding them, so hide the weakest label on that half.
+  while (L.overlapCount > 0) {
+    const clashing = L.clashing.map((i) => nodes[i]);
+    let candidates = clashing.filter((n) => n.showLabel);
+    if (!candidates.length) candidates = nodes.filter((n) => n.showLabel && clashing.some((c) => c.testament === n.testament));
+    if (!candidates.length) break;
+    candidates.reduce((a, b) => (b.votes < a.votes ? b : a)).showLabel = false;
     L = layoutWith();
   }
+  nodes.forEach((n, i) => nodeEls[i].classList.toggle('label-on-demand', !n.showLabel));
 
   root.setAttribute('width', width);
   root.setAttribute('height', Math.ceil(L.height));
   root.setAttribute('viewBox', `0 0 ${width} ${Math.ceil(L.height)}`);
 
-  // The ellipse itself, in two halves: lapis for the Old Testament, gold for the New.
+  // The circle itself, in two halves: lapis for the Old Testament, gold for the New,
+  // with a tick at each end.
   guide.prepend(
-    svg('path', { class: 'graph-guide-ot', d: ellipseArc(L, -SPAN, -SPLIT) }),
-    svg('path', { class: 'graph-guide-nt', d: ellipseArc(L, SPLIT, SPAN) }),
+    svg('path', { class: 'graph-guide-ot', d: circleArc(L, -SPAN, -SPLIT) }),
+    svg('path', { class: 'graph-guide-nt', d: circleArc(L, SPLIT, SPAN) }),
+    ...L.ends.map((m, i) => svg('line', { class: `graph-tick ${i ? 'nt' : 'ot'}`, ...m.tick })),
   );
   L.ends.forEach((m, i) => {
-    endTexts[i].setAttribute('x', m.x);
+    endTexts[i].setAttribute('x', m.box.left);
     endTexts[i].setAttribute('y', (m.box.top + m.box.bottom) / 2);
   });
 
@@ -205,36 +211,60 @@ export function renderGraph(container, { centerId, out, incoming, index, maxHeig
     const g = svg('g', { class: `graph-edge ${kind}` });
     g.append(svg('path', { class: 'graph-edge-line', d, 'stroke-width': w }), svg('path', { class: 'graph-arrow', d: arrow }));
     edgeLayer.append(g);
-    edgeEls.get(e.node).push(g);
+    edgeEls.get(e.node).push({ g, dir: e.dir });
   }
 
-  // Hover/focus: a node's edges darken, and a hidden label shows in the overlay.
+  // Hover/focus: a node's edges darken (only those in direction dir, if given), its dot gets
+  // the hover ring, and a hidden label shows in the overlay. The same happens when the verse
+  // is hovered in the reference lists (highlight below).
+  let hot = null;
+  const off = () => {
+    if (!hot) return;
+    for (const { g } of edgeEls.get(hot)) g.classList.remove('is-hot');
+    nodeEls[nodes.indexOf(hot)].classList.remove('is-hot');
+    overlay.setAttribute('visibility', 'hidden');
+    hot = null;
+  };
+  const on = (n, dir) => {
+    off();
+    hot = n;
+    nodeEls[nodes.indexOf(n)].classList.add('is-hot');
+    for (const { g, dir: d } of edgeEls.get(n)) {
+      if (dir && d !== dir) continue;
+      g.classList.add('is-hot');
+      edgeLayer.append(g); // draw on top of the other edges
+    }
+    if (n.showLabel) return;
+    const side = Math.sin(n.place.angle) >= 0 ? 1 : -1;
+    overlay.textContent = n.label;
+    overlay.setAttribute('x', n.place.x + side * (R + LABEL_GAP));
+    overlay.setAttribute('y', n.place.y);
+    overlay.setAttribute('text-anchor', side > 0 ? 'start' : 'end');
+    overlay.setAttribute('visibility', 'visible');
+  };
   nodes.forEach((n, i) => {
     const el = nodeEls[i];
-    const on = () => {
-      for (const g of edgeEls.get(n)) {
-        g.classList.add('is-hot');
-        edgeLayer.append(g); // draw on top of the other edges
-      }
-      if (n.showLabel) return;
-      const side = Math.sin(n.place.angle) >= 0 ? 1 : -1;
-      overlay.textContent = n.label;
-      overlay.setAttribute('x', n.place.x + side * (R + LABEL_GAP));
-      overlay.setAttribute('y', n.place.y);
-      overlay.setAttribute('text-anchor', side > 0 ? 'start' : 'end');
-      overlay.setAttribute('visibility', 'visible');
+    const enter = () => {
+      on(n);
+      onHighlight?.(n.id);
     };
-    const off = () => {
-      for (const g of edgeEls.get(n)) g.classList.remove('is-hot');
-      overlay.setAttribute('visibility', 'hidden');
+    const leave = () => {
+      off();
+      onHighlight?.(null);
     };
-    el.addEventListener('mouseenter', on);
-    el.addEventListener('focus', on);
-    el.addEventListener('mouseleave', off);
-    el.addEventListener('blur', off);
+    el.addEventListener('mouseenter', enter);
+    el.addEventListener('focus', enter);
+    el.addEventListener('mouseleave', leave);
+    el.addEventListener('blur', leave);
   });
 
   return {
+    // Lights up the verse id (and its edge in direction dir) if the graph draws it; null clears.
+    highlight(id, dir) {
+      const n = id === null ? null : nodes.find((m) => m.id === id);
+      if (n) on(n, dir);
+      else off();
+    },
     ot: nodes.some((n) => n.testament === 'ot'),
     nt: nodes.some((n) => n.testament === 'nt'),
     out: edges.some((e) => e.dir === 'out'),
